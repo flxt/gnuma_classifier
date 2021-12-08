@@ -114,6 +114,7 @@ class Train(Resource):
 		with SqliteDict('./distilBERT.sqlite') as db:
 			db[model_id] = request.json
 			db[model_id]['model_id'] = model_id
+			db[model_id]['trainend'] = False
 			db.commit()
 
 		# put training request in the que

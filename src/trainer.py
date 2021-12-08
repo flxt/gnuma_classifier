@@ -1,6 +1,7 @@
 from datasets import load_dataset
 from transformers import AutoTokenizer, DataCollatorForTokenClassification
 from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
+import torch
 
 import time
 from sqlitedict import SqliteDict
@@ -44,6 +45,15 @@ def training_thread(q):
 			# train
 			trainer.train()
 
+			# set the model as trained
+			with SqliteDict('./distilBERT.sqlite') as db:
+				db[model_id]['trainend'] = True
+				db[model_id]['num_labels'] = num_labels
+				db.commit()
+
+			# save the model
+			torch.save(model.state_dict(), 'models/' + model_id + '.pth')
+
 # if not all needed infos where in training request
 # update key value model info with default values
 def update_model_info(model_id):
@@ -82,7 +92,7 @@ def get_training_args(model_id):
 	model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
 	return TrainingArguments(
-		output_dir = './models/' + model_id,
+		output_dir = './checkpoints/' + model_id,
 		evaluation_strategy = 'epoch',
 		learning_rate = model_info['learning_rate'],
 		per_device_train_batch_size = model_info['batch_size'],
