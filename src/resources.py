@@ -4,6 +4,8 @@ from flask_restful import Resource, abort
 from sqlitedict import SqliteDict
 from queue import Queue
 
+import os
+
 import uuid
 
 # Abort if a json file is expected, but not part of the request
@@ -44,7 +46,8 @@ class Base(Resource):
 			model_info = db.pop(model_id)
 			db.commit()
 
-		# todo remove model file
+		# delete model file
+		os.remove('models/' + model_id + '.pth')
 
 		return model_info
 
@@ -112,9 +115,10 @@ class Train(Resource):
 
 		# save the model info
 		with SqliteDict('./distilBERT.sqlite') as db:
-			db[model_id] = request.json
-			db[model_id]['model_id'] = model_id
-			db[model_id]['trainend'] = False
+			req = request.json
+			req['model_id'] = model_id
+			req['trainend'] = False
+			db[model_id] = req
 			db.commit()
 
 		# put training request in the que

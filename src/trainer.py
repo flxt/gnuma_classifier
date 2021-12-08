@@ -4,6 +4,7 @@ from transformers import AutoModelForTokenClassification, TrainingArguments, Tra
 import torch
 
 import time
+import shutil
 from sqlitedict import SqliteDict
 
 
@@ -45,14 +46,19 @@ def training_thread(q):
 			# train
 			trainer.train()
 
-			# set the model as trained
-			with SqliteDict('./distilBERT.sqlite') as db:
-				db[model_id]['trainend'] = True
-				db[model_id]['num_labels'] = num_labels
-				db.commit()
-
 			# save the model
 			torch.save(model.state_dict(), 'models/' + model_id + '.pth')
+
+			# set the model as trained
+			with SqliteDict('./distilBERT.sqlite') as db:
+				model_info = db[model_id]
+				model_info['trainend'] = True
+				model_info['num_labels'] = num_labels
+				db[model_id] = model_info
+				db.commit()
+
+			# remove the checkpoints
+			shutil.rmtree('./checkpoints/' + model_id)
 
 # if not all needed infos where in training request
 # update key value model info with default values
