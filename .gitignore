@@ -1,2 +1,3 @@
-distilBERT.sqlite
+*.sqlite
 src/__pycache__/
+models/

@@ -8,108 +8,110 @@ from sqlitedict import SqliteDict
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
-def training_tread(q):
+def training_thread(q):
 	while True:
 		# if queue is empty: wait a second and check again
 		#ugly. change!
 		if q.empty():
 			time.sleep(1)
 		else:
-			# init model trainer
-			mt = ModelTrainer()
+			# get the model id from the q
+			model_id = q.get()
 
-			#update the model indo with default values
-			mt.update_model_info()
+			# update the model id with default values for missing values from request
+			update_model_info(model_id)
 
+			# get training arguments
+			training_args = get_training_args(model_id)
 
+			# get the data
+			dh = DataHelper()
+			data, num_labels = dh.get_data(model_id)
 
+			# define the model
+			model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
 
-class ModelTrainer():
-	# default values as static variables
-	default_learning_rate = 2e-5
-	default_batch_size = 16
-	default_epochs = 3
-	default_warmupsteps = 400
-	default_weight_decay = 0.01
+			# define the Trainer
+			trainer = Trainer(
+				model = model,
+				args = training_args,
+				train_dataset = data['train'],
+				eval_dataset = data['test'],
+				data_collator = dh.data_collator,
+				tokenizer = dh.tokenizer,
+				)
 
-	# define the class
-	# model id is given
-	# set up tokenizer
-	def __init__(self, model_id):
-		self._model_id = model_id
-		self._tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-		self._data_collator = DataCollatorForTokenClassification(tokenizer)
+			# train
+			trainer.train()
 
-		self.update_model_info()
-		self._training_args = self.get_training_args()
+# if not all needed infos where in training request
+# update key value model info with default values
+def update_model_info(model_id):
+	model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
-		self._data, self.num_labels = self.get_data()
+	if 'learning_rate' not  in model_info:
+		model_info['learning_rate'] = defaults.learning_rate
 
-		self._model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=self.num_labels)
+	if 'batch_size' not in model_info:
+		model_info['batch_size'] = defaults.batch_size
 
-		self._trainer = Trainer(
-			model = self._model,
-			args = self.get_training_args,
-			train_dataset = self._data['train'],
-			eval_dataset = self._data['test'],
-			data_collator = self._data_collator,
-			tokenizer = self._tokenizer,
-			)
+	if 'epochs' not in model_info:
+		model_info['epochs'] = defaults.epochs
 
-	# if not all needed infos where in training request
-	# update key value model info with default values
-	def update_model_info()
-		model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+	if 'warmupsteps' not in model_info:
+		model_info['warmupsteps'] = defaults.warmupsteps
 
-		if 'learning_rate' not  inin model_info:
-			model_info['learning_rate'] = default_learning_rate
+	if 'weight_decay' not in model_info:
+		model_info['weight_decay'] = defaults.weight_decay
 
-		if 'batch_size' not in in model_info:
-			model_info['batch_size'] = default_batch_size
+	#save to key value store
+	with SqliteDict('./distilBERT.sqlite') as db:
+		db[model_id] = model_info
+		db.commit()
 
-		if 'epochs' not in model_info:
-			model_info['epochs'] = default_epochs
+# class storing the default values
+class defaults():
+	learning_rate = 2e-5
+	batch_size = 16
+	epochs = 3
+	warmupsteps = 400
+	weight_decay = 0.01
 
-		if 'warmupsteps' not in model_info:
-			model_info['warmupsteps'] = default_warmupsteps
+# returns the training arguments. values are taken from from model_info
+def get_training_args(model_id):
+	model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
-		if 'weight_decay' not in model_info:
-			model_info['weight_decay'] = default_weight_decay
+	return TrainingArguments(
+		output_dir = './models/' + model_id,
+		evaluation_strategy = 'epoch',
+		learning_rate = model_info['learning_rate'],
+		per_device_train_batch_size = model_info['batch_size'],
+		per_device_eval_batch_size = model_info['batch_size'],
+		num_train_epochs = model_info['epochs'],
+		weight_decay = model_info['weight_decay'],
+		warmup_steps = model_info['warmupsteps'])
 
-		#save to key value store
-		with SqliteDict('./distilBERT.sqlite') as db:
-			db[model_id] = request.json
-			db.commit()
+class DataHelper():
 
-	# returns the training arguments. values are taken from from model_info
-	def get_training_args():
-		model_info = SqliteDict('./distilBERT.sqlite')[model_id]
-
-		return TrainingArguments(
-			output_dir = './models/' + self._model_id,
-			evaluation_strategy = 'epoch',
-			learning_rate = model_info['learning_rate'],
-			per_device_train_batch_size = model_info['batch_size'],
-			per_device_eval_batch_size = model_info['batch_size'],
-			num_train_epochs = model_info['epochs'],
-			weight_decay = model_info['weight_decay'],
-			warmup_steps = model_info['warmupsteps'])
-
+	def __init__(self):
+		self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+		self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
 
 	# get the data and prepare it for 
 	# for now it only loads the wnut_17 data set
-	def get_data():
+	def get_data(self, model_id):
 		wnut = load_dataset('wnut_17')
 
-		data = wnut.map(tokenize_and_align_labels, batched=True)
+		data = wnut.map(self.tokenize_and_align_labels, batched=True)
 		num_labels = len(wnut["train"].features[f"ner_tags"].feature.names)
 
 		return data, num_labels
 
+
 	# method to tokenize and allign labels
 	# taken from the hugging face documentation
-	def tokenize_and_align_labels(examples):
-		tokenized_inputs = self._tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
+	def tokenize_and_align_labels(self, examples):
+		tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
 
 		labels = []
 		for i, label in enumerate(examples[f"ner_tags"]):
@@ -126,6 +128,3 @@ class ModelTrainer():
 
 		tokenized_inputs["labels"] = labels
 		return tokenized_inputs
-
-	def train():
-		self._trainer.train()
