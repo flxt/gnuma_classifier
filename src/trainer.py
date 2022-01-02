@@ -13,7 +13,7 @@ import logging
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
 def training_thread(q):
-	logging.info('Training thread alive')
+	logging.debug('Training thread alive')
 	while True:
 		# if queue is empty: wait a second and check again
 		#ugly. change!
@@ -85,6 +85,7 @@ def training_thread(q):
 			shutil.rmtree('./checkpoints/' + model_id)
 
 			logging.debug('Removed checkpoints')
+			
 			logging.info(f'Training for model {model_id} finished')
 
 # if not all needed infos where in training request
@@ -106,6 +107,9 @@ def update_model_info(model_id):
 
 	if 'weight_decay' not in model_info:
 		model_info['weight_decay'] = defaults.weight_decay
+
+	if 'best_model' not in model_info:
+		model_info['best_model'] = True
 
 	#save to key value store
 	with SqliteDict('./distilBERT.sqlite') as db:
@@ -136,7 +140,8 @@ def get_training_args(model_id):
 		per_device_eval_batch_size = model_info['batch_size'],
 		num_train_epochs = model_info['epochs'],
 		weight_decay = model_info['weight_decay'],
-		warmup_steps = model_info['warmupsteps'])
+		warmup_steps = model_info['warmupsteps'],
+		load_best_model_at_end = model_info['best_model'])
 
 class DataHelper():
 
