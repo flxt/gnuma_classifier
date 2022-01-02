@@ -5,20 +5,24 @@ from sqlitedict import SqliteDict
 from queue import Queue
 
 import os
+import logging
 
 import uuid
 
 # Abort if a json file is expected, but not part of the request
 def abort_not_json():
     abort(400, message='Only accepting requests with mime type application/json.')
+    logging.error('Only accepting requests with mime type application/json.')
 
 # Abort if expected parameter is missing from the request.
 def abort_missing_parameter(parameter_name: str):
     abort(400, message=f'Expected "{parameter_name}" to be part of the request body.')
+    logging.error(f'Expected "{parameter_name}" to be part of the request body.')
 
 # Abort if specified model doesnt exist.
 def abort_wrong_model_id(model_id: str):
 	abort(400, message=f'No model with ÍD "{model_id}" exists.')
+	logging.error('No model with ÍD "{model_id}" exists.')
 
 # API enpoint where only a model ID is given
 class Base(Resource):
@@ -30,6 +34,8 @@ class Base(Resource):
 
 		# get info for model from db
 		model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
+		logging.debug('Model from kv-store returned')
 
 		return model_info
 
@@ -47,7 +53,10 @@ class Base(Resource):
 			db.commit()
 
 		# delete model file
-		os.remove('models/' + model_id + '.pth')
+		#TODO check for existence
+		os.remove(f'models/{model_id}.pth')
+
+		logging.debug(f'Deleted model {model_id} from kv-store and from hard drive')
 
 		return model_info
 
@@ -95,6 +104,8 @@ class List(Resource):
 				else:
 					model_list[model_id] = 'no description'
 
+		logging.debug('Returned a list of all models')
+
 		return model_list
 
 # API endpoint for training a new model.
@@ -121,7 +132,11 @@ class Train(Resource):
 			db[model_id] = req
 			db.commit()
 
+		logging.debug(f'Put model {model_id} in kv-store')
+
 		# put training request in the que
 		self._q.put(model_id)
 
-		return {'status':'put in list', 'model_id':model_id}
+		logging.info(f'Put model {model_id} in training queue')
+
+		return {'status':'in_list', 'model_id':model_id}

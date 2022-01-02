@@ -7,10 +7,13 @@ import time
 import shutil
 from sqlitedict import SqliteDict
 
+import logging
+
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
 def training_thread(q):
+	logging.info('Training thread alive')
 	while True:
 		# if queue is empty: wait a second and check again
 		#ugly. change!
@@ -19,6 +22,8 @@ def training_thread(q):
 		else:
 			# get the model id from the q
 			model_id = q.get()
+
+			logging.info(f'Got model {model_id} from the training queue')
 
 			# update the model id with default values for missing values from request
 			update_model_info(model_id)
@@ -33,6 +38,8 @@ def training_thread(q):
 			# define the model
 			model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
 
+			logging.debug('Model defined')
+
 			# define the Trainer
 			trainer = Trainer(
 				model = model,
@@ -43,22 +50,42 @@ def training_thread(q):
 				tokenizer = dh.tokenizer,
 				)
 
-			# train
-			trainer.train()
+			logging.debug('Trainer defined')
 
-			# save the model
-			torch.save(model.state_dict(), 'models/' + model_id + '.pth')
-
-			# set the model as trained
 			with SqliteDict('./distilBERT.sqlite') as db:
 				model_info = db[model_id]
-				model_info['trainend'] = True
+				model_info['status'] = 'training'
 				model_info['num_labels'] = num_labels
 				db[model_id] = model_info
 				db.commit()
 
+			logging.debug('Set model status to training.')
+			logging.info(f'Starting training for model {model_id}')
+
+			# train
+			trainer.train()
+
+			logging.debug(f'Training done for model {model_id}')
+
+			# save the model
+			torch.save(model.state_dict(), f'models/{model_id}.pth')
+
+			logging.debug(f'Saved model {model_id}')
+
+			# set the model as trained
+			with SqliteDict('./distilBERT.sqlite') as db:
+				model_info = db[model_id]
+				model_info['status'] = 'trained'
+				db[model_id] = model_info
+				db.commit()
+
+			logging.debug('Set model status to trained')
+
 			# remove the checkpoints
 			shutil.rmtree('./checkpoints/' + model_id)
+
+			logging.debug('Removed checkpoints')
+			logging.info(f'Training for model {model_id} finished')
 
 # if not all needed infos where in training request
 # update key value model info with default values
@@ -85,6 +112,8 @@ def update_model_info(model_id):
 		db[model_id] = model_info
 		db.commit()
 
+	logging.debug(f'Updated the info for model {model_id} with default values if necessary')
+
 # class storing the default values
 class defaults():
 	learning_rate = 2e-5
@@ -96,6 +125,8 @@ class defaults():
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):
 	model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
+	logging.debug(f'Returning training arguments based on kv-store info for model {model_id}')
 
 	return TrainingArguments(
 		output_dir = './checkpoints/' + model_id,
@@ -112,6 +143,7 @@ class DataHelper():
 	def __init__(self):
 		self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 		self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
+		logging.debug('Set up tokenizer and data collector')
 
 	# get the data and prepare it for 
 	# for now it only loads the wnut_17 data set
@@ -120,6 +152,8 @@ class DataHelper():
 
 		data = wnut.map(self.tokenize_and_align_labels, batched=True)
 		num_labels = len(wnut["train"].features[f"ner_tags"].feature.names)
+
+		logging.debug(f'Prepared data for model {model_id}')
 
 		return data, num_labels
 
@@ -143,4 +177,6 @@ class DataHelper():
 			labels.append(label_ids)
 
 		tokenized_inputs["labels"] = labels
+
+		logging.debug('Tokenizeda and alligned labels')
 		return tokenized_inputs
