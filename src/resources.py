@@ -26,6 +26,11 @@ def abort_wrong_model_id(model_id: str):
 
 # API enpoint where only a model ID is given
 class Base(Resource):
+
+	# init the resource
+	def __init__(self, que: Queue):
+		self._q = que
+
 	# Return the decription and more info for the model with the given id
 	def get(self, model_id: str):
 		# check if model exists
@@ -74,25 +79,29 @@ class Base(Resource):
 		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
 			abort_wrong_model_id(model_id)
 
-		#todo
-		return 'TODO: Continue the training of the specified model'
+		# put training request in the que
+		self._q.put(model_id)
+
+		logging.info(f'Put model {model_id} in training queue')
+
+		return {'status':'in_que', 'model_id':model_id}
 
 # API endpoint for interrupting the training
 class Interrupt(Resource):
 
 	# init the resource
-	def __init__(self, stop: bool):
+	def __init__(self, stop):
 		self._stop = stop
 
 	# Interrupt the training and save the model to continue it later
 	def put(self):
 		self._stop = 1
-		return 'Interrupted training'
+		return 'Interruption signal sent'
 
 	# Interrupt the Training and discard the model.
 	def delete(self):
 		self._stop = 2
-		return 'Interrupted training and deleted the model'
+		return 'Interrupted and deletion signal sent'
 
 # API endpoint for classifying data wiht a specified model
 class Classify(Resource):
@@ -145,7 +154,6 @@ class Train(Resource):
 		with SqliteDict('./distilBERT.sqlite') as db:
 			req = request.json
 			req['model_id'] = model_id
-			req['trainend'] = False
 			db[model_id] = req
 			db.commit()
 
@@ -156,4 +164,4 @@ class Train(Resource):
 
 		logging.info(f'Put model {model_id} in training queue')
 
-		return {'status':'in_list', 'model_id':model_id}
+		return {'status':'in_que', 'model_id':model_id}

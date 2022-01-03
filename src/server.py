@@ -7,7 +7,7 @@ from queue import Queue
 from threading import Thread
 
 from src.resources import Base, Interrupt, Classify, Test, List, Train
-import src.trainer as tr
+from src.trainer import training_thread
 
 import logging
 
@@ -31,14 +31,14 @@ if __name__ == '__main__':
     logging.debug('Queue initiated')
 
     # start thread for running model
-    t = Thread(target = tr.training_thread, args=(q,interrupt,))
+    t = Thread(target = training_thread, args=(q,stop,))
     t.start()
 
     logging.debug('Training thread started')
 
     # Add the RestFULL REsources to the api
-    api.add_resource(Base, '/distilbert/models/<model_id>')
-    api.add_resource(Interrupt, '/distilbert/interrupt')
+    api.add_resource(Base, '/distilbert/models/<model_id>', resource_class_kwargs ={'que' : q})
+    api.add_resource(Interrupt, '/distilbert/interrupt', resource_class_kwargs ={'stop' : stop})
     api.add_resource(Classify, '/distilbert/classify/<model_id>')
     api.add_resource(Test, '/distilbert/test/<model_id>')
     api.add_resource(List, '/distilbert/models')
