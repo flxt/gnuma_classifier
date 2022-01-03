@@ -1,6 +1,7 @@
 from datasets import load_dataset
 from transformers import AutoTokenizer, DataCollatorForTokenClassification
 from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
+from transformers import TrainerCallback
 import torch
 
 import time
@@ -12,7 +13,7 @@ import logging
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
-def training_thread(q):
+def training_thread(q, stop):
 	logging.debug('Training thread alive')
 	while True:
 		# if queue is empty: wait a second and check again
@@ -48,6 +49,7 @@ def training_thread(q):
 				eval_dataset = data['test'],
 				data_collator = dh.data_collator,
 				tokenizer = dh.tokenizer,
+				callbacks = [InterruptCallback(stop)]
 				)
 
 			logging.debug('Trainer defined')
@@ -62,31 +64,66 @@ def training_thread(q):
 			logging.debug('Set model status to training.')
 			logging.info(f'Starting training for model {model_id}')
 
+			stop = 0
+
 			# train
 			trainer.train()
 
-			logging.debug(f'Training done for model {model_id}')
+			#Training completed normally
+			if (stop == 0):
+				logging.debug(f'Training done for model {model_id}')
 
-			# save the model
-			torch.save(model.state_dict(), f'models/{model_id}.pth')
+				# save the model
+				torch.save(model.state_dict(), f'models/{model_id}.pth')
 
-			logging.debug(f'Saved model {model_id}')
+				logging.debug(f'Saved model {model_id}')
 
-			# set the model as trained
-			with SqliteDict('./distilBERT.sqlite') as db:
-				model_info = db[model_id]
-				model_info['status'] = 'trained'
-				db[model_id] = model_info
-				db.commit()
+				# set the model as trained
+				with SqliteDict('./distilBERT.sqlite') as db:
+					model_info = db[model_id]
+					model_info['status'] = 'trained'
+					db[model_id] = model_info
+					db.commit()
 
-			logging.debug('Set model status to trained')
+				logging.debug('Set model status to trained')
 
-			# remove the checkpoints
-			shutil.rmtree('./checkpoints/' + model_id)
+				# remove the checkpoints
+				if os.path.isdir(f'./checkpoints/{model_id}'):
+					shutil.rmtree(f'./checkpoints/{model_id}')
 
-			logging.debug('Removed checkpoints')
-			
-			logging.info(f'Training for model {model_id} finished')
+					logging.debug('Removed checkpoints')
+
+				logging.info(f'Training for model {model_id} finished')
+
+			# Training interrupted
+			elif (stop == 1):
+				# set the model as interrupted
+				with SqliteDict('./distilBERT.sqlite') as db:
+					model_info = db[model_id]
+					model_info['status'] = 'interrupted'
+					db[model_id] = model_info
+					db.commit()
+
+				logging.debug('Set model status to interrupted')
+
+				logging.debug(f'model {model_id} interrupted')
+
+			# Training interruptd and model to be deleted
+			else:
+				# remove the model from db
+				with SqliteDict('./distilBERT.sqlite') as db:
+					model_info = db.pop(model_id)
+					db.commit()
+
+				logging.debug(f'Deleted model {model_id} from kv-store')
+
+				# remove the checkpoints
+				if os.path.isdir(f'./checkpoints/{model_id}'):
+					shutil.rmtree('./checkpoints/' + model_id)
+
+					logging.debug('Removed checkpoints')
+
+				logging.debug(f'model {model_id} interrupted and deleted')
 
 # if not all needed infos where in training request
 # update key value model info with default values
@@ -185,3 +222,18 @@ class DataHelper():
 
 		logging.debug('Tokenizeda and alligned labels')
 		return tokenized_inputs
+
+
+#callback that check if training is supposed to be interrupted
+class InterruptCallback(TrainerCallback):
+
+	def __init__(self, stop):
+		self._stop = stop
+
+	#check after every training step if training should stop
+	def on_step_end(args, state, control, **kwargs):
+		if self._stop > 0:
+			logging.debug('Stopping training. Trying to evaluate and save before.')
+			control.should_evaluate = True
+			control.should_save = True 
+			control.should_training_stop = True 

@@ -52,30 +52,47 @@ class Base(Resource):
 			model_info = db.pop(model_id)
 			db.commit()
 
-		# delete model file
-		#TODO check for existence
-		os.remove(f'models/{model_id}.pth')
+		logging.debug(f'Deleted model {model_id} from kv-store')
 
-		logging.debug(f'Deleted model {model_id} from kv-store and from hard drive')
+		# delete model file
+		if os.path.isfile(f'models/{model_id}.pth'):
+			os.remove(f'models/{model_id}.pth')
+
+			logging.debug(f'Deleted model {model_id} from harddrive')
+
+		# remove the checkpoints
+		if os.path.isdir(f'./checkpoints/{model_id}'):
+			shutil.rmtree(f'./checkpoints/{model_id}')
+
+			logging.debug(f'Deleted model {model_id} checkpoints')		
 
 		return model_info
 
 	# Continue the training of the classifiers with the specified id.
 	def put(self, model_id: str):
+		# check if model exists
+		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+			abort_wrong_model_id(model_id)
+
 		#todo
 		return 'TODO: Continue the training of the specified model'
 
 # API endpoint for interrupting the training
 class Interrupt(Resource):
+
+	# init the resource
+	def __init__(self, stop: bool):
+		self._stop = stop
+
 	# Interrupt the training and save the model to continue it later
 	def put(self):
-		#todo
-		return 'TODO: Interrupt training and save model'
+		self._stop = 1
+		return 'Interrupted training'
 
 	# Interrupt the Training and discard the model.
 	def delete(self):
-		#todo
-		return 'TODO: Interrupt training and yeet model'
+		self._stop = 2
+		return 'Interrupted training and deleted the model'
 
 # API endpoint for classifying data wiht a specified model
 class Classify(Resource):

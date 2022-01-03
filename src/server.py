@@ -16,6 +16,9 @@ if __name__ == '__main__':
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
 
+    #global interrupt vairable
+    stop = 0
+
     # Init Flask App and API
     app = Flask(__name__)
     api = Api(app)
@@ -28,7 +31,7 @@ if __name__ == '__main__':
     logging.debug('Queue initiated')
 
     # start thread for running model
-    t = Thread(target = tr.training_thread, args=(q,))
+    t = Thread(target = tr.training_thread, args=(q,interrupt,))
     t.start()
 
     logging.debug('Training thread started')
