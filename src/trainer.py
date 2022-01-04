@@ -31,111 +31,114 @@ def training_thread(q: Queue, stop: InterruptState):
 
 			logging.info(f'Got model {model_id} from the training queue')
 
-			#check if training is getting continued
-			if (False):
-				#todo
-				logging.debug(f'Starting to continue the traing for model {model_id}')
+			# update the model id with default values for missing values from request
+			update_model_info(model_id)
 
-			#continue normally
+			# get training arguments
+			training_args = get_training_args(model_id)
+
+			# get the data
+			dh = DataHelper()
+			data, num_labels = dh.get_data(model_id)
+
+			# define the model
+			model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
+
+			logging.debug('Model defined')
+
+			# define the Trainer
+			trainer = Trainer(
+				model = model,
+				args = training_args,
+				train_dataset = data['train'],
+				eval_dataset = data['test'],
+				data_collator = dh.data_collator,
+				tokenizer = dh.tokenizer,
+				callbacks = [InterruptCallback(stop)]
+				)
+
+			logging.debug('Trainer defined')
+
+			with SqliteDict('./distilBERT.sqlite') as db:
+				model_info = db[model_id]
+				model_info['status'] = 'training'
+				model_info['num_labels'] = num_labels
+				db[model_id] = model_info
+				db.commit()
+
+			logging.debug('Set model status to training.')
+			logging.info(f'Starting training for model {model_id}')
+
+			# train
+			if (stop.get_state() == 0):
+				#check if training is getting continued
+				if (len(os.listdir(f'./checkpoints/{model_id}')) > 0):
+					cp_list = os.listdir(f'./checkpoints/{model_id}')
+					cp_list.sort(reverse = True)
+					
+					logging.debug(f'Starting to continue the traing for model {model_id} from checkpoint {cp_list[0]}')
+					trainer.train(f'./checkpoints/{model_id}/{cp_list[0]}')
+
+				#continue normally
+				else:
+					logging.info(f'Starting training for model {model_id}')
+					trainer.train()
 			else:
-				# update the model id with default values for missing values from request
-				update_model_info(model_id)
+				logging.debug('training stopped before it started')
 
-				# get training arguments
-				training_args = get_training_args(model_id)
+			#Training completed normally
+			if (stop.get_state() == 0):
+				logging.debug(f'Training done for model {model_id}')
 
-				# get the data
-				dh = DataHelper()
-				data, num_labels = dh.get_data(model_id)
+				# save the model
+				torch.save(model.state_dict(), f'models/{model_id}.pth')
 
-				# define the model
-				model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
+				logging.debug(f'Saved model {model_id}')
 
-				logging.debug('Model defined')
-
-				# define the Trainer
-				trainer = Trainer(
-					model = model,
-					args = training_args,
-					train_dataset = data['train'],
-					eval_dataset = data['test'],
-					data_collator = dh.data_collator,
-					tokenizer = dh.tokenizer,
-					callbacks = [InterruptCallback(stop)]
-					)
-
-				logging.debug('Trainer defined')
-
+				# set the model as trained
 				with SqliteDict('./distilBERT.sqlite') as db:
 					model_info = db[model_id]
-					model_info['status'] = 'training'
-					model_info['num_labels'] = num_labels
+					model_info['status'] = 'trained'
 					db[model_id] = model_info
 					db.commit()
 
-				logging.debug('Set model status to training.')
-				logging.info(f'Starting training for model {model_id}')
+				logging.debug('Set model status to trained')
 
-				# train
-				if (stop.get_state() == 0):
-					logging.info(f'Starting training for model {model_id}')
-					trainer.train()
-				else:
-					logging.debug('training stopped before it started')
+				# remove the checkpoints
+				if os.path.isdir(f'./checkpoints/{model_id}'):
+					shutil.rmtree(f'./checkpoints/{model_id}')
 
-				#Training completed normally
-				if (stop.get_state() == 0):
-					logging.debug(f'Training done for model {model_id}')
+					logging.debug('Removed checkpoints')
 
-					# save the model
-					torch.save(model.state_dict(), f'models/{model_id}.pth')
+				logging.info(f'Training for model {model_id} finished')
 
-					logging.debug(f'Saved model {model_id}')
+			# Training interrupted
+			elif (stop.get_state() == 1):
+				# set the model as interrupted
+				with SqliteDict('./distilBERT.sqlite') as db:
+					model_info = db[model_id]
+					model_info['status'] = 'interrupted'
+					db[model_id] = model_info
+					db.commit()
 
-					# set the model as trained
-					with SqliteDict('./distilBERT.sqlite') as db:
-						model_info = db[model_id]
-						model_info['status'] = 'trained'
-						db[model_id] = model_info
-						db.commit()
+				logging.debug('Set model status to interrupted')
 
-					logging.debug('Set model status to trained')
+				logging.debug(f'model {model_id} interrupted')
 
-					# remove the checkpoints
-					if os.path.isdir(f'./checkpoints/{model_id}'):
-						shutil.rmtree(f'./checkpoints/{model_id}')
+			# Training interruptd and model to be deleted
+			else:
+				# remove the model from db
+				with SqliteDict('./distilBERT.sqlite') as db:
+					model_info = db.pop(model_id)
+					db.commit()
 
-						logging.debug('Removed checkpoints')
+				logging.debug(f'Deleted model {model_id} from kv-store')
 
-					logging.info(f'Training for model {model_id} finished')
+				# remove the checkpoints
+				if os.path.isdir(f'./checkpoints/{model_id}'):
+					shutil.rmtree('./checkpoints/' + model_id)
 
-				# Training interrupted
-				elif (stop.get_state() == 1):
-					# set the model as interrupted
-					with SqliteDict('./distilBERT.sqlite') as db:
-						model_info = db[model_id]
-						model_info['status'] = 'interrupted'
-						db[model_id] = model_info
-						db.commit()
+					logging.debug('Removed checkpoints')
 
-					logging.debug('Set model status to interrupted')
-
-					logging.debug(f'model {model_id} interrupted')
-
-				# Training interruptd and model to be deleted
-				else:
-					# remove the model from db
-					with SqliteDict('./distilBERT.sqlite') as db:
-						model_info = db.pop(model_id)
-						db.commit()
-
-					logging.debug(f'Deleted model {model_id} from kv-store')
-
-					# remove the checkpoints
-					if os.path.isdir(f'./checkpoints/{model_id}'):
-						shutil.rmtree('./checkpoints/' + model_id)
-
-						logging.debug('Removed checkpoints')
-
-					logging.debug(f'model {model_id} interrupted and deleted')
+				logging.debug(f'model {model_id} interrupted and deleted')
 

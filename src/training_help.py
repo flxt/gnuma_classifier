@@ -122,12 +122,9 @@ class InterruptCallback(TrainerCallback):
 
 	def __init__(self, stop: InterruptState):
 		self._stop = stop
-		logging.debug(f'Callback stop: {id(self._stop)}')
 
 	#check after every training step if training should stop
 	def on_step_end(self, args, state, control, **kwargs):
-		logging.debug(f'Callback stop: {id(self._stop)}')
-		logging.debug(f'Callback stop: {self._stop.get_state()}')
 		if self._stop.get_state() > 0:
 			logging.debug('Stopping training. Trying to evaluate and save before.')
 			control.should_evaluate = True
