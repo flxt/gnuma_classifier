@@ -4,6 +4,8 @@ from flask_restful import Resource, abort
 from sqlitedict import SqliteDict
 from queue import Queue
 
+from src.training_help import InterruptState
+
 import os
 import logging
 
@@ -90,17 +92,19 @@ class Base(Resource):
 class Interrupt(Resource):
 
 	# init the resource
-	def __init__(self, stop):
+	def __init__(self, stop: InterruptState):
 		self._stop = stop
+		logging.debug(f'Ressource stop: {id(self._stop)}')
 
 	# Interrupt the training and save the model to continue it later
 	def put(self):
-		self._stop = 1
+		self._stop.set_state(1)
+		logging.debug(f'Ressource stop: {id(self._stop)}')
 		return 'Interruption signal sent'
 
 	# Interrupt the Training and discard the model.
 	def delete(self):
-		self._stop = 2
+		self._stop.set_state(2)
 		return 'Interrupted and deletion signal sent'
 
 # API endpoint for classifying data wiht a specified model

@@ -53,14 +53,14 @@ def get_training_args(model_id):
 
 	return TrainingArguments(
 		output_dir = './checkpoints/' + model_id,
-		evaluation_strategy = 'epoch',
 		learning_rate = model_info['learning_rate'],
 		per_device_train_batch_size = model_info['batch_size'],
 		per_device_eval_batch_size = model_info['batch_size'],
 		num_train_epochs = model_info['epochs'],
 		weight_decay = model_info['weight_decay'],
 		warmup_steps = model_info['warmupsteps'],
-		load_best_model_at_end = model_info['best_model'])
+		load_best_model_at_end = model_info['best_model'],
+		evaluation_strategy = 'steps')
 
 class DataHelper():
 
@@ -105,17 +105,32 @@ class DataHelper():
 		logging.debug('Tokenizeda and alligned labels')
 		return tokenized_inputs
 
+# SAves the interrupt state
+class InterruptState():
+
+	 def __init__(self):
+	 	self._stop = 0
+
+	 def get_state(self):
+	 	return self._stop
+
+	 def set_state(self, x):
+	 	self._stop = x
 
 #callback that check if training is supposed to be interrupted
 class InterruptCallback(TrainerCallback):
 
-	def __init__(self, stop):
+	def __init__(self, stop: InterruptState):
 		self._stop = stop
+		logging.debug(f'Callback stop: {id(self._stop)}')
 
 	#check after every training step if training should stop
-	def on_step_end(args, state, control, **kwargs):
-		if self._stop > 0:
+	def on_step_end(self, args, state, control, **kwargs):
+		logging.debug(f'Callback stop: {id(self._stop)}')
+		logging.debug(f'Callback stop: {self._stop.get_state()}')
+		if self._stop.get_state() > 0:
 			logging.debug('Stopping training. Trying to evaluate and save before.')
 			control.should_evaluate = True
 			control.should_save = True 
 			control.should_training_stop = True 
+

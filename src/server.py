@@ -8,6 +8,7 @@ from threading import Thread
 
 from src.resources import Base, Interrupt, Classify, Test, List, Train
 from src.trainer import training_thread
+from src.training_help import InterruptState
 
 import logging
 
@@ -17,7 +18,8 @@ if __name__ == '__main__':
     logging.getLogger().setLevel(logging.DEBUG)
 
     #global interrupt vairable
-    stop = 0
+    stop = InterruptState()
+    logging.debug(f'Server stop: {id(stop)}')
 
     # Init Flask App and API
     app = Flask(__name__)

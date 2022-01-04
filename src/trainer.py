@@ -1,7 +1,9 @@
 from transformers import Trainer
 import torch
 
+from queue import Queue
 import time
+import os
 import shutil
 from sqlitedict import SqliteDict
 
@@ -12,7 +14,7 @@ from src.training_help import *
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
-def training_thread(q, stop):
+def training_thread(q: Queue, stop: InterruptState):
 	logging.debug('Training thread alive')
 	while True:
 		# if queue is empty: wait a second and check again
@@ -21,7 +23,8 @@ def training_thread(q, stop):
 			time.sleep(1)
 		else:
 			# reset stop
-			stop = 0
+			logging.debug(f'Trainer stop: {id(stop)}')
+			stop.set_state(0)
 
 			# get the model id from the q
 			model_id = q.get()
@@ -29,7 +32,7 @@ def training_thread(q, stop):
 			logging.info(f'Got model {model_id} from the training queue')
 
 			#check if training is getting continued
-			if (SqliteDict('./distilBERT.sqlite')[model_id][status] == 'interrupted'):
+			if (False):
 				#todo
 				logging.debug(f'Starting to continue the traing for model {model_id}')
 
@@ -74,14 +77,14 @@ def training_thread(q, stop):
 				logging.info(f'Starting training for model {model_id}')
 
 				# train
-				if (stop == 0):
+				if (stop.get_state() == 0):
 					logging.info(f'Starting training for model {model_id}')
 					trainer.train()
 				else:
 					logging.debug('training stopped before it started')
 
 				#Training completed normally
-				if (stop == 0):
+				if (stop.get_state() == 0):
 					logging.debug(f'Training done for model {model_id}')
 
 					# save the model
@@ -107,7 +110,7 @@ def training_thread(q, stop):
 					logging.info(f'Training for model {model_id} finished')
 
 				# Training interrupted
-				elif (stop == 1):
+				elif (stop.get_state() == 1):
 					# set the model as interrupted
 					with SqliteDict('./distilBERT.sqlite') as db:
 						model_info = db[model_id]
