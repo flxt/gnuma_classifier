@@ -2,14 +2,14 @@ from flask import request
 from flask_restful import Resource, abort
 
 from sqlitedict import SqliteDict
+import uuid
+
 from queue import Queue
-
-from src.training_help import InterruptState
-
 import os
 import logging
 
-import uuid
+from src.training_help import InterruptState, QueueElement, delete_model
+
 
 # Abort if a json file is expected, but not part of the request
 def abort_not_json():
@@ -26,12 +26,18 @@ def abort_wrong_model_id(model_id: str):
 	abort(400, message=f'No model with ÍD "{model_id}" exists.')
 	logging.error('No model with ÍD "{model_id}" exists.')
 
+# Abort wrong model for operation
+def abort_wrong_op_type(model_id: str, op_type: str, status: str):
+	abort(400, message = f'Can not {status} for model {model_id} with status {status}.')
+	logging.error(f'Can not {status} for model {model_id} with status {status}.')
+
 # API enpoint where only a model ID is given
 class Base(Resource):
 
 	# init the resource
 	def __init__(self, que: Queue):
 		self._q = que
+		self._op_type = 'continue'
 
 	# Return the decription and more info for the model with the given id
 	def get(self, model_id: str):
@@ -42,8 +48,6 @@ class Base(Resource):
 		# get info for model from db
 		model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
-		logging.debug('Model from kv-store returned')
-
 		return model_info
 
 	# Delete the model with the specified id
@@ -52,41 +56,26 @@ class Base(Resource):
 		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
 			abort_wrong_model_id(model_id)
 
-		model_info = ''
-
-		# remove the model from db
-		with SqliteDict('./distilBERT.sqlite') as db:
-			model_info = db.pop(model_id)
-			db.commit()
-
-		logging.debug(f'Deleted model {model_id} from kv-store')
-
-		# delete model file
-		if os.path.isfile(f'models/{model_id}.pth'):
-			os.remove(f'models/{model_id}.pth')
-
-			logging.debug(f'Deleted model {model_id} from harddrive')
-
-		# remove the checkpoints
-		if os.path.isdir(f'./checkpoints/{model_id}'):
-			shutil.rmtree(f'./checkpoints/{model_id}')
-
-			logging.debug(f'Deleted model {model_id} checkpoints')		
+		model_info = delete_model(model_id)
 
 		return model_info
 
 	# Continue the training of the classifiers with the specified id.
 	def put(self, model_id: str):
-		# check if model exists
+		# Check if model exists
 		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
 			abort_wrong_model_id(model_id)
 
+		# Check if model was interruptd
+		if (SqliteDict('./distilBERT.sqlite')[model_id][status] != 'interrupted'):
+			abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+
 		# put training request in the que
-		self._q.put(model_id)
+		self._q.put(QueueElement(model_id, self._op_type))
 
-		logging.info(f'Put model {model_id} in training queue')
+		logging.info(f'Put model {model_id} in queue to continue training')
 
-		return {'status':'in_que', 'model_id':model_id}
+		return {'status':'in_que', 'operation':'continue', 'model_id':model_id}
 
 # API endpoint for interrupting the training
 class Interrupt(Resource):
@@ -94,32 +83,68 @@ class Interrupt(Resource):
 	# init the resource
 	def __init__(self, stop: InterruptState):
 		self._stop = stop
-		logging.debug(f'Ressource stop: {id(self._stop)}')
 
 	# Interrupt the training and save the model to continue it later
 	def put(self):
 		self._stop.set_state(1)
-		logging.debug(f'Ressource stop: {id(self._stop)}')
+		logging.info('Interruption signal sent.')
 		return 'Interruption signal sent'
 
 	# Interrupt the Training and discard the model.
 	def delete(self):
 		self._stop.set_state(2)
-		return 'Interrupted and deletion signal sent'
+		logging.info('Interruption and deletion signal sent')
+		return 'Interruption and deletion signal sent'
 
 # API endpoint for classifying data wiht a specified model
-class Classify(Resource):
-	# classifying data wiht a specified model
+class Predict(Resource):
+
+	# Init the resource
+	def __init__(self, que: Queue):
+		self._q = que
+		self._op_type = 'predict'
+
+	# Predict data wiht a specified model
 	def get(self, model_id: str):
-		#todo
-		return 'TODO: Classify data with specified model'
+		# check if model exists
+		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+			abort_wrong_model_id(model_id)
+
+		# Check if model is trained
+		if (SqliteDict('./distilBERT.sqlite')[model_id][status] != 'trained'):
+			abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+
+		# put prediction request in the que
+		self._q.put(QueueElement(model_id, self._op_type))
+
+		logging.info(f'Put model {model_id} in queue for prediction')
+
+		return {'status':'in_que', 'operation':'predict', 'model_id':model_id}
 
 # API endpoint for given some labeled data for testing to the model.
-class Test(Resource):
-	# Test the model with the given data and return some performance information
+class Evaluate(Resource):
+
+	# Init the resource
+	def __init__(self, que: Queue):
+		self._q = que
+		self._op_type = 'evaluate'
+
+	# Evaluate the model with the given data and return some performance information
 	def get(self, model_id: str):
-		#todo
-		return 'TODO: Test the model with given data'
+		# check if model exists
+		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+			abort_wrong_model_id(model_id)
+
+		# Check if model is trained
+		if (SqliteDict('./distilBERT.sqlite')[model_id][status] != 'trained'):
+			abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+
+		# Put evaluation request in que
+		self._q.put(QueueElement(model_id, self._op_type))
+
+		logging.info(f'Put model {model_id} in queue for evaluation')
+
+		return {'status':'in_que', 'operation':'evaluate', 'model_id':model_id}
 
 # API endpoint for returning a list of all saved models.
 class List(Resource):
@@ -134,8 +159,6 @@ class List(Resource):
 				else:
 					model_list[model_id] = 'no description'
 
-		logging.debug('Returned a list of all models')
-
 		return model_list
 
 # API endpoint for training a new model.
@@ -144,6 +167,7 @@ class Train(Resource):
 	# init the resource
 	def __init__(self, que: Queue):
 		self._q = que
+		self._op_type = 'train'
 
 	# Train a new Classifier
 	def post(self):
@@ -151,21 +175,19 @@ class Train(Resource):
 		if not request.is_json:
 			return abort_not_json()
 
-		# generate a random model id
+		# Generate a random model id
 		model_id = str(uuid.uuid4())
 
-		# save the model info
+		# Save the model info
 		with SqliteDict('./distilBERT.sqlite') as db:
 			req = request.json
 			req['model_id'] = model_id
 			db[model_id] = req
 			db.commit()
 
-		logging.debug(f'Put model {model_id} in kv-store')
+		# Put training request in the que
+		self._q.put(QueueElement(model_id, self._op_type))
 
-		# put training request in the que
-		self._q.put(model_id)
+		logging.info(f'Put model {model_id} in queue for training')
 
-		logging.info(f'Put model {model_id} in training queue')
-
-		return {'status':'in_que', 'model_id':model_id}
+		return {'status':'in_que', 'operation':'train', 'model_id':model_id}
