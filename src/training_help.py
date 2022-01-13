@@ -8,29 +8,17 @@ from sqlitedict import SqliteDict
 import os
 import shutil
 import logging
+import json
 
 # If not all needed infos where in training request
 # Update key value model info with default values
 def update_model_info(model_id):
 	model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+	defaults = SqliteDict('./distilBERT.sqlite')[defaults]
 
-	if 'learning_rate' not  in model_info:
-		model_info['learning_rate'] = defaults.learning_rate
-
-	if 'batch_size' not in model_info:
-		model_info['batch_size'] = defaults.batch_size
-
-	if 'epochs' not in model_info:
-		model_info['epochs'] = defaults.epochs
-
-	if 'warmupsteps' not in model_info:
-		model_info['warmupsteps'] = defaults.warmupsteps
-
-	if 'weight_decay' not in model_info:
-		model_info['weight_decay'] = defaults.weight_decay
-
-	if 'best_model' not in model_info:
-		model_info['best_model'] = True
+	for key in defaults.keys():
+		if key not in model_info:
+			model_info[key] = defaults[key]
 
 	#save to key value store
 	with SqliteDict('./distilBERT.sqlite') as db:
@@ -38,15 +26,6 @@ def update_model_info(model_id):
 		db.commit()
 
 	logging.debug(f'Updated the info for model {model_id} with default values if necessary')
-
-
-# class storing the default values
-class defaults():
-	learning_rate = 2e-5
-	batch_size = 16
-	epochs = 3
-	warmupsteps = 400
-	weight_decay = 0.0
 
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):

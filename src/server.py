@@ -1,9 +1,11 @@
 from flask import Flask
 from flask_restful import Api
+from sqlitedict import SqliteDict
 
 from queue import Queue
 from threading import Thread
 import logging
+import json
 
 from src.resources import *
 from src.training import training_thread
@@ -20,6 +22,11 @@ if __name__ == '__main__':
 
     # init the bunny postal service
     bux = BunnyPostalService()
+
+    # Load default values in kv-stor
+    with SqliteDict('./distilBERT.sqlite') as db:
+        db['defaults'] = json.load('./defaults.json')
+        db.commit()
 
     # Init Flask App and API
     app = Flask(__name__)
