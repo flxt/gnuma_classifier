@@ -9,7 +9,7 @@
 			"value_list": null,
 			"optional": false,
 			"default": null,
-			"description": "A short expressive model name.",
+			"description": "A short expressive model name."
 		},
 		{
 			"name": "data_location",
@@ -17,7 +17,7 @@
 			"value_list": null,
 			"optional": false,
 			"default": null,
-			"description": "The remote location where the training data can be loaded.",
+			"description": "The remote location where the training data can be loaded."
 		},
 		{
 			"name": "best_model",
@@ -25,7 +25,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": true,
-			"description": "States if the best model should be loaded at the end.",
+			"description": "States if the best model should be loaded at the end."
 		},
 		{
 			"name": "steps",
@@ -33,7 +33,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 500,
-			"description": "After this number of steps a checkpoint is made.",
+			"description": "After this number of steps a checkpoint is made."
 		},
 		{
 			"name": "batch_size",
@@ -41,7 +41,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 16,
-			"description": "The batch size for training and evaluation",
+			"description": "The batch size for training and evaluation"
 		},
 		{
 			"name": "learning_rate",
@@ -49,7 +49,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 2e-5,
-			"description": "The learning rate during training.",
+			"description": "The learning rate during training."
 		},
 		{
 			"name": "epochs",
@@ -57,7 +57,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 3.0,
-			"description": "The number of training epochs.",
+			"description": "The number of training epochs."
 		},
 		{
 			"name": "warmup_ratio",
@@ -65,7 +65,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.0,
-			"description": "The ratio of training steps used for warmup.",
+			"description": "The ratio of training steps used for warmup."
 		},
 		{
 			"name": "adam_weigth_decay",
@@ -73,7 +73,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.0,
-			"description": "Weight decay for AdamW optimizer.",
+			"description": "Weight decay for AdamW optimizer."
 		},
 		{
 			"name": "adam_beta1",
@@ -81,7 +81,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.9,
-			"description": "Beta1 for AdamW optimizer.",
+			"description": "Beta1 for AdamW optimizer."
 		},
 		{
 			"name": "adam_beta2",
@@ -89,7 +89,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.999,
-			"description": "Beta2 for AdamW optimizer. Setting this to 0.998 is recommended for large batch sizes.",
+			"description": "Beta2 for AdamW optimizer. Setting this to 0.998 is recommended for large batch sizes."
 		},
 				{
 			"name": "adam_epsilon",
@@ -97,7 +97,7 @@
 			"value_list": null,
 			"optional": true,
 			"default": 1e-8,
-			"description": "Epsilon for AdamW optimizer.",
+			"description": "Epsilon for AdamW optimizer."
 		}
 	]
 }

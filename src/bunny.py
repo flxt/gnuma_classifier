@@ -2,6 +2,8 @@ import pika
 from pika.exchange_type import ExchangeType
 
 import logging
+import json
+
 
 class BunnyCredentials():
     rabbit_mq_host = 'h2826957.stratoserver.net'
@@ -23,10 +25,13 @@ class BunnyPostalService():
         self._routing_key = BunnyCredentials.rabbit_mq_routing_key
 
     # The BunnyPostalServices delivers your message to the distilbert exchange.
-    def send_message(self, routing_key, message):
+    def send_message(self, message):
         logging.info(f'Send a message to the distilbert exchange.')
-        self._channel.basic_publish(exchange = self._exchange, routing_key = self._routing_key, bodoy = message)
+        self._channel.basic_publish(exchange = self._exchange, routing_key = self._routing_key, body = json.dumps(message))
 
     # The BunnyPostalService introduces the Microservice to the exchange
-    def hello(self):
-        
+    def say_hello(self):
+        with open('./distilbert_startup.json') as json_file:
+            startup = json.load(json_file)
+
+        self.send_message(startup)
