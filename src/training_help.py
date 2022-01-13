@@ -46,7 +46,7 @@ class defaults():
 	batch_size = 16
 	epochs = 3
 	warmupsteps = 400
-	weight_decay = 0.01
+	weight_decay = 0.0
 
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):

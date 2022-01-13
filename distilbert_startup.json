@@ -1,0 +1,26 @@
+{
+	"id": "distilbert",
+	"address": "tba",
+	"hyperParameters": 
+	[
+		{
+			"name": "Epoch",
+			"type": "INTEGER",
+			"value_list": null,
+			"optional": false,
+			"default": 3,
+			"description": "The number of epochs the model should train. Often values between 2 and 4 are used.",
+			"topBorder": "Biggest value allowed, applicable only to INTEGER and DOUBLE, can be null, then no limitation",
+			"bottomBorder": "Lowest value allowed, applicable only to INTEGER and DOUBLE, can be null, then no limitation"
+		},
+		{
+			"name": "Data",
+			"type": "STRING",
+			"value_list": null,
+			"optional": true,
+			"default": null,
+			"description": "Adress where the training data can be loaded"
+		}
+	]
+}
+		

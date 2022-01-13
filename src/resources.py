@@ -34,11 +34,6 @@ def abort_wrong_op_type(model_id: str, op_type: str, status: str):
 # API enpoint where only a model ID is given
 class Base(Resource):
 
-	# init the resource
-	def __init__(self, que: Queue):
-		self._q = que
-		self._op_type = 'continue'
-
 	# Return the decription and more info for the model with the given id
 	def get(self, model_id: str):
 		# check if model exists
@@ -56,18 +51,26 @@ class Base(Resource):
 		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
 			abort_wrong_model_id(model_id)
 
-		model_info = delete_model(model_id)
+		delete_model(model_id)
 
-		return model_info
+		return {'model_id':model_id, 'operation':'deleted'}
+
+
+class Continue(Resource):
+
+	# init the resource
+	def __init__(self, que: Queue):
+		self._q = que
+		self._op_type = 'continue'
 
 	# Continue the training of the classifiers with the specified id.
-	def put(self, model_id: str):
+	def post(self, model_id: str):
 		# Check if model exists
 		if not model_id in SqliteDict('./distilBERT.sqlite').keys():
 			abort_wrong_model_id(model_id)
 
 		# Check if model was interruptd
-		if (SqliteDict('./distilBERT.sqlite')[model_id][status] != 'interrupted'):
+		if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted'):
 			abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
 
 		# put training request in the que
@@ -75,7 +78,22 @@ class Base(Resource):
 
 		logging.info(f'Put model {model_id} in queue to continue training')
 
-		return {'status':'in_que', 'operation':'continue', 'model_id':model_id}
+		return {'model_id':model_id, 'operation':'continue'}
+
+
+# API endpoint for interrupting the training to continue later
+class Pause(Resource):
+
+	# init the resource
+	def __init__(self, stop: InterruptState):
+		self._stop = stop
+
+	# Interrupt the training and save the model to continue it later
+	def patch(self):
+		self._stop.set_state(1)
+		logging.info('Interruption signal sent.')
+		return {'model_id':model_id, 'operation':'pause'}
+
 
 # API endpoint for interrupting the training
 class Interrupt(Resource):
@@ -84,17 +102,12 @@ class Interrupt(Resource):
 	def __init__(self, stop: InterruptState):
 		self._stop = stop
 
-	# Interrupt the training and save the model to continue it later
-	def put(self):
-		self._stop.set_state(1)
-		logging.info('Interruption signal sent.')
-		return 'Interruption signal sent'
-
 	# Interrupt the Training and discard the model.
 	def delete(self):
 		self._stop.set_state(2)
 		logging.info('Interruption and deletion signal sent')
-		return 'Interruption and deletion signal sent'
+		return {'model_id':model_id, 'operation':'interrupt'}
+
 
 # API endpoint for classifying data wiht a specified model
 class Predict(Resource):
@@ -111,7 +124,7 @@ class Predict(Resource):
 			abort_wrong_model_id(model_id)
 
 		# Check if model is trained
-		if (SqliteDict('./distilBERT.sqlite')[model_id][status] != 'trained'):
+		if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained'):
 			abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
 
 		# put prediction request in the que
@@ -119,7 +132,8 @@ class Predict(Resource):
 
 		logging.info(f'Put model {model_id} in queue for prediction')
 
-		return {'status':'in_que', 'operation':'predict', 'model_id':model_id}
+		return {'model_id':model_id, 'operation':'predict'}
+
 
 # API endpoint for given some labeled data for testing to the model.
 class Evaluate(Resource):
@@ -136,7 +150,7 @@ class Evaluate(Resource):
 			abort_wrong_model_id(model_id)
 
 		# Check if model is trained
-		if (SqliteDict('./distilBERT.sqlite')[model_id][status] != 'trained'):
+		if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained'):
 			abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
 
 		# Put evaluation request in que
@@ -144,7 +158,8 @@ class Evaluate(Resource):
 
 		logging.info(f'Put model {model_id} in queue for evaluation')
 
-		return {'status':'in_que', 'operation':'evaluate', 'model_id':model_id}
+		return {'model_id':model_id, 'operation':'evaluate'}
+
 
 # API endpoint for returning a list of all saved models.
 class List(Resource):
@@ -154,12 +169,13 @@ class List(Resource):
 
 		with SqliteDict('./distilBERT.sqlite') as db:
 			for model_id in db.keys():
-				if 'Description' in db[model_id]:
-					model_list[model_id] = db[model_id]['Description']
+				if 'status' in db[model_id]:
+					model_list[model_id] = db[model_id]['status']
 				else:
-					model_list[model_id] = 'no description'
+					model_list[model_id] = 'REEE'
 
 		return model_list
+
 
 # API endpoint for training a new model.
 class Train(Resource):
@@ -190,4 +206,4 @@ class Train(Resource):
 
 		logging.info(f'Put model {model_id} in queue for training')
 
-		return {'status':'in_que', 'operation':'train', 'model_id':model_id}
+		return {'model_id':model_id, 'operation':'train'}

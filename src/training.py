@@ -6,13 +6,14 @@ from sqlitedict import SqliteDict
 from queue import Queue
 import time
 import logging
+import os
 
 from src.training_help import *
-
+from src.bunny import BunnyPostalService
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
-def training_thread(q: Queue, stop: InterruptState):
+def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService):
 	logging.debug('Training thread alive')
 	while True:
 		# If queue is empty: wait a second and check again
@@ -28,18 +29,18 @@ def training_thread(q: Queue, stop: InterruptState):
 			logging.info(f'Got model {model_id} with operation type {op_type} from the queue')
 
 			if (op_type == 'train'):
-				train_new_model(model_id, stop)
+				train_new_model(model_id, stop, bux)
 			elif (op_type == 'continue'):
-				continue_training_model(model_id, stop)
+				continue_training_model(model_id, stop, bux)
 			elif (op_type == 'evaluate'):
-				evaluate_model(model_id, stop)
+				evaluate_model(model_id, stop, bux)
 			elif (op_type == 'predict'):
-				predict_with_model(model_id, stop)
+				predict_with_model(model_id, stop, bux)
 			else:
 				logging.error(f'Wrong operation type {op_type} for model {model_id}')
 
 # Call this method to train a new model
-def train_new_model(model_id, stop):
+def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
 	# Check if default values are needed and set them accordingly
 	update_model_info(model_id)
 
@@ -112,7 +113,7 @@ def train_new_model(model_id, stop):
 		logging.info(f'Training of model {model_id} was interrupted and the model was deleted.')
 
 # Call this method to continue the training of a model.
-def continue_training_model(model_id, stop):
+def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
 	# Get a list of all checkpoints
 	cp_list = os.listdir(f'./checkpoints/{model_id}')
 	# Sort the list in a way that the last checkpoint is in the first spot.
@@ -192,16 +193,55 @@ def continue_training_model(model_id, stop):
 
 
 # Call this method evaluate a model
-def evaluate_model(model_id, stop):
-	pass
+def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
+	if not os.path.isfile(f'models/{model_id}.pth'):
+		logging.error(f'Model {model_id} does not exist.')
+
+	# Get the training Arguments
+	training_args = get_training_args(model_id)
+
+	# Get the evaluation data
+	dh = DataHelper()
+	data, num_labels = dh.get_data(model_id)
+
+	# Define a new model
+	model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
+
+	# Load trained weights
+	model.load_state_dict(torch.load(f'models/{model_id}.pth'))
+	model.eval()
+
+	# Define the trainer
+	trainer = Trainer(
+		model = model,
+		args = training_args,
+		data_collator = dh.data_collator,
+		tokenizer = dh.tokenizer
+		)
+
+	# Run the Evaluation
+	out = trainer.evaluate(eval_dataset = data['train'])
+
+	logging.info(f'Evaluated model {model_id}.')
+
+	# Push results to RabbitMQ
+	with open('test.txt', 'w') as f:
+		json.dump(out, f)
+
+
 
 
 # Call this method to predict with a model
-def predict_with_model(model_id, stop):
-	pass
+def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
+	if not os.path.isfile(f'models/{model_id}.pth'):
+		logging.error(f'Model {model_id} does not exist.')
 
-			
+	# Define a new model
+	model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = SqliteDict('./distilBERT.sqlite')[model_id]['num_labels'])
 
+	# Load trained weights
+	model.load_state_dict(torch.load(f'models/{model_id}.pth'))
+	model.eval()
 
 
 
