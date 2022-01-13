@@ -9,6 +9,8 @@ import os
 import shutil
 import logging
 
+from src.bunny import BunnyPostalService
+
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
@@ -16,15 +18,21 @@ def get_training_args(model_id):
     logging.debug(f'Returning training arguments based on kv-store info for model {model_id}')
 
     return TrainingArguments(
-        output_dir = './checkpoints/' + model_id,
+        output_dir = f'./checkpoints/{model_id}',
         learning_rate = model_info['learning_rate'],
         per_device_train_batch_size = model_info['batch_size'],
         per_device_eval_batch_size = model_info['batch_size'],
         num_train_epochs = model_info['epochs'],
-        weight_decay = model_info['weight_decay'],
-        warmup_steps = model_info['warmupsteps'],
+        weight_decay = model_info['adam_weigth_decay'],
+        warmup_ratio = model_info['warmup_ratio'],
         load_best_model_at_end = model_info['best_model'],
-        evaluation_strategy = 'steps')
+        evaluation_strategy = 'steps',
+        save_steps = model_info['steps'],
+        eval_steps = model_info['steps'],
+        adam_beta1 = model_info['adam_beta1'],
+        adam_beta2 = model_info['adam_beta2'],
+        adam_epsilon = model_info['adam_epsilon'],
+        )
 
 class DataHelper():
 
@@ -105,13 +113,36 @@ class InterruptCallback(TrainerCallback):
     def __init__(self, stop: InterruptState):
         self._stop = stop
 
-    #check after every training step if training should stop
+    # check after every training step if training should stop
     def on_step_end(self, args, state, control, **kwargs):
         if (self._stop.get_state() > 0):
             if (self._stop.get_state() == 1):
                 control.should_evaluate = True
                 control.should_save = True 
-            control.should_training_stop = True 
+            control.should_training_stop = True
+
+# callback that check if training is supposed to be interrupted
+class EvaluateCallback(TrainerCallback):
+
+    def __init__(self, bux: BunnyPostalService, model_id: str):
+        self._bux = bux
+        self._model_id = model_id
+        self._metrics = {'eval_loss': -1}
+        self._finished = False
+
+    # check after every training step if training should stop
+    def on_evaluate(self, args, state, control, metrics, **kwargs):
+        self._metrics['eval_loss'] = metrics['eval_loss']
+
+        self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
+
+    # first update when the training starts
+    def on_train_begin(self, args, state, control, **kwargs):
+        self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
+
+    def on_train_end(self, args, state, control, **kwargs):
+        control.should_evaluate = True
+        self._finished = True
 
 # Methods that removes checkpoints for model with model_id if checkpoints exist.
 def remove_checkpoints(model_id):

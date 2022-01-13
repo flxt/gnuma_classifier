@@ -165,14 +165,11 @@ class Evaluate(Resource):
 class List(Resource):
     # Return a list of all saved models
     def get(self):
-        model_list = {}
+        model_list = []
 
         with SqliteDict('./distilBERT.sqlite') as db:
             for model_id in db.keys():
-                if 'status' in db[model_id]:
-                    model_list[model_id] = db[model_id]['status']
-                else:
-                    model_list[model_id] = 'REEE'
+                model_list.append({'model_id': model_id, 'model_name': db[model_id]['model_name'], 'data': db[model_id]['data_location'], 'status': db[model_id]['status']})
 
         return model_list
 
@@ -191,12 +188,19 @@ class Train(Resource):
         if not request.is_json:
             return abort_not_json()
 
+        req = request.json
+
+        if 'model_name' not in req:
+            abort_missing_parameter('model_name')
+
+        if 'data_location' not in req:
+            abort_missing_parameter('data_location')
+
         # Generate a random model id
         model_id = str(uuid.uuid4())
 
         # Save the model info
         with SqliteDict('./distilBERT.sqlite') as db:
-            req = request.json
             req['model_id'] = model_id
             db[model_id] = req
             db.commit()

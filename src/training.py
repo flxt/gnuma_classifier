@@ -7,6 +7,7 @@ from queue import Queue
 import time
 import logging
 import os
+import json
 
 from src.training_help import *
 from src.bunny import BunnyPostalService
@@ -43,7 +44,9 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService):
 def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
     # Check if default values are needed and set them accordingly
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
-    defaults = SqliteDict('./distilBERT.sqlite')[defaults]
+    
+    with open('./defaults.json') as json_file:
+        defaults = json.load(json_file)
 
     for key in defaults.keys():
         if key not in model_info:
@@ -74,7 +77,7 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
             eval_dataset = data['test'],
             data_collator = dh.data_collator,
             tokenizer = dh.tokenizer,
-            callbacks = [InterruptCallback(stop)]
+            callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)]
             )
 
     # Update the model info that the model is training
@@ -104,6 +107,8 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
             model_info['status'] = 'trained'
             db[model_id] = model_info
             db.commit()
+
+        trainer.evaluate()
 
         logging.info(f'Training for model {model_id} finished.')
 
@@ -153,7 +158,7 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
                 eval_dataset = data['test'],
                 data_collator = dh.data_collator,
                 tokenizer = dh.tokenizer,
-                callbacks = [InterruptCallback(stop)]
+                callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)]
                 )
 
         # Update the model info that the model is training
@@ -183,6 +188,9 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
                 model_info['status'] = 'trained'
                 db[model_id] = model_info
                 db.commit()
+
+            # Run final evaluation
+            trainer.evaluate()
 
             logging.info(f'Training for model {model_id} finished.')
 
@@ -236,12 +244,6 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService)
 
     logging.info(f'Evaluated model {model_id}.')
 
-    # Push results to RabbitMQ
-    with open('test.txt', 'w') as f:
-        json.dump(out, f)
-
-
-
 
 # Call this method to predict with a model
 def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
@@ -254,8 +256,3 @@ def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalServ
     # Load trained weights
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
     model.eval()
-
-
-
-        
-

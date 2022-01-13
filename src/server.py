@@ -23,14 +23,6 @@ if __name__ == '__main__':
     # init the bunny postal service
     bux = BunnyPostalService()
 
-    # Load default values in kv-store
-    with open('./defaults.json') as json_file:
-        defaults = json.load(json_file)
-
-    with SqliteDict('./distilBERT.sqlite') as db:
-        db['defaults'] = defaults
-        db.commit()
-
     # Init Flask App and API
     app = Flask(__name__)
     api = Api(app)
