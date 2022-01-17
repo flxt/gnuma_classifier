@@ -9,10 +9,22 @@ import json
 
 from src.resources import Base, Interrupt, Pause, Predict, Evaluate, Continue, List, Train
 from src.training import training_thread
-from src.utils import InterruptState
+from src.utils import InterruptState, check_model, delete_model
 from src.bunny import BunnyPostalService
 
 if __name__ == '__main__':
+    # Delete all models that are in a faulty state
+    keys = SqliteDict('./distilBERT.sqlite').keys()
+    for model_id in keys:
+        status = SqliteDict('./distilBERT.sqlite')[model_id]['status']
+        # models that were training or in que when server died will get deleted
+        if status not in ('trained', 'interrupted'):
+            delete_model(model_id)
+
+        # check for models with missing data on drive
+        else:
+            check_model(model_id)
+
     # set logging lvl
     logging.basicConfig()
     logging.getLogger().setLevel(logging.INFO)

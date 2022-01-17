@@ -67,3 +67,25 @@ def delete_model(model_id):
         logging.debug(f'Deleted model {model_id} checkpoints')
 
     return model_info
+
+
+# Check if model state matches files on hard drive.
+# If that is not the case, delete the model
+# Returns true if state is correct, else false is returned
+def check_model(model_id):
+    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
+    good = True
+
+    # Model is trained => check for saved weights
+    if (model_info['status'] == 'trained'):
+        good = os.path.isfile(f'models/{model_id}.pth')
+
+    # Model was interrupted => check for checkpoints
+    if (model_info['status'] == 'interrupted'):
+        good = os.path.isdir(f'./checkpoints/{model_id}')
+
+    if not good:
+        delete_model(model_id)
+
+    return good

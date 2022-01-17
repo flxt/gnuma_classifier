@@ -8,7 +8,7 @@ from queue import Queue
 import os
 import logging
 
-from src.utils import InterruptState, QueueElement, delete_model
+from src.utils import InterruptState, QueueElement, delete_model, check_model
 
 
 # Abort if a json file is expected, but not part of the request
@@ -24,7 +24,12 @@ def abort_missing_parameter(parameter_name: str):
 # Abort if specified model doesnt exist.
 def abort_wrong_model_id(model_id: str):
     abort(400, message=f'No model with ÍD "{model_id}" exists.')
-    logging.error('No model with ÍD "{model_id}" exists.')
+    logging.error(f'No model with ÍD "{model_id}" exists.')
+
+# Abort if model is corrupted.
+def abort_faulty_model(model_id: str):
+    abort(400, message=f'Model "{model_id}" corrupted. Delete the model.')
+    logging.error(f'Model "{model_id}" corrupted. Delete the model.')
 
 # Abort wrong model for operation
 def abort_wrong_op_type(model_id: str, op_type: str, status: str):
@@ -39,6 +44,9 @@ class Base(Resource):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
+
+        if not check_model(model_id):
+            abort_faulty_model(model_id)
 
         # get info for model from db
         model_info = SqliteDict('./distilBERT.sqlite')[model_id]
@@ -68,6 +76,9 @@ class Continue(Resource):
         # Check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
+
+        if not check_model(model_id):
+            abort_faulty_model(model_id)
 
         # Check if model was interruptd
         if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted'):
@@ -123,9 +134,8 @@ class Predict(Resource):
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
 
-        # Check if model is trained
-        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained'):
-            abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+        if not check_model(model_id):
+            abort_faulty_model(model_id)
 
         # put prediction request in the que
         self._q.put(QueueElement(model_id, self._op_type))
@@ -149,9 +159,8 @@ class Evaluate(Resource):
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
 
-        # Check if model is trained
-        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained'):
-            abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+        if not check_model(model_id):
+            abort_faulty_model(model_id)
 
         # Put evaluation request in que
         self._q.put(QueueElement(model_id, self._op_type))
