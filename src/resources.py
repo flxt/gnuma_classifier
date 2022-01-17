@@ -8,7 +8,7 @@ from queue import Queue
 import os
 import logging
 
-from src.training_help import InterruptState, QueueElement, delete_model
+from src.utils import InterruptState, QueueElement, delete_model
 
 
 # Abort if a json file is expected, but not part of the request

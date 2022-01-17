@@ -7,9 +7,9 @@ from threading import Thread
 import logging
 import json
 
-from src.resources import *
+from src.resources import Base, Interrupt, Pause, Predict, Evaluate, Continue, List, Train
 from src.training import training_thread
-from src.training_help import InterruptState
+from src.utils import InterruptState
 from src.bunny import BunnyPostalService
 
 if __name__ == '__main__':
