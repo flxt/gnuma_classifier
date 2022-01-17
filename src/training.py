@@ -137,86 +137,86 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
     # Sort the list in a way that the last checkpoint is in the first spot.
     cp_list.sort(reverse = True)
 
-    # If there are no checkpoints something went wrong.
-    # The training can't be continued.
-    if (len(cp_list) == 0):
-        logging.error(f'Training for model {model_id} can not be continued.')
+    #check for correct status
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted' or check_model(model_id):
+        # todo: some error message
+        return
 
-    # If there is at least one check point continue the training.
-    else:
-        # Get the data
-        dh = DataHelper()
-        data, num_labels = dh.get_data(model_id)
+    # Get the data
+    dh = DataHelper()
+    data, num_labels = dh.get_data(model_id)
 
-        # Define a new model
-        model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
+    # Define a new model
+    model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = num_labels)
 
-        # Define the trainer
-        trainer = Trainer(
-                model = model,
-                args = training_args,
-                train_dataset = data['train'],
-                eval_dataset = data['test'],
-                data_collator = dh.data_collator,
-                tokenizer = dh.tokenizer,
-                callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)]
-                )
+    # Define the trainer
+    trainer = Trainer(
+            model = model,
+            args = training_args,
+            train_dataset = data['train'],
+            eval_dataset = data['test'],
+            data_collator = dh.data_collator,
+            tokenizer = dh.tokenizer,
+            callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)]
+            )
 
-        # Update the model info that the model is training
+    # Update the model info that the model is training
+    with SqliteDict('./distilBERT.sqlite') as db:
+        model_info = db[model_id]
+        model_info['status'] = 'training'
+        model_info['num_labels'] = num_labels
+        db[model_id] = model_info
+        db.commit()
+
+    # Continue training the model if no interruption
+    logging.info(f'Continueing the training for model {model_id}')
+    trainer.train(f'./checkpoints/{cp_list[0]}')
+
+    # Training done
+    # Case: Training finished normally
+    if (stop.get_state() == 0):
+        # Save the model
+        torch.save(model.state_dict(), f'models/{model_id}.pth')
+
+        # Remove the checkpoints because either the best model is already loaded or the final model was the goal
+        remove_checkpoints(model_id)
+
+        # Update the model info is trained
         with SqliteDict('./distilBERT.sqlite') as db:
             model_info = db[model_id]
-            model_info['status'] = 'training'
-            model_info['num_labels'] = num_labels
+            model_info['status'] = 'trained'
             db[model_id] = model_info
             db.commit()
 
-        # Continue training the model if no interruption
-        logging.info(f'Continueing the training for model {model_id}')
-        trainer.train(f'./checkpoints/{cp_list[0]}')
+        # Run final evaluation
+        trainer.evaluate()
 
-        # Training done
-        # Case: Training finished normally
-        if (stop.get_state() == 0):
-            # Save the model
-            torch.save(model.state_dict(), f'models/{model_id}.pth')
+        logging.info(f'Training for model {model_id} finished.')
 
-            # Remove the checkpoints because either the best model is already loaded or the final model was the goal
-            remove_checkpoints(model_id)
+    # Case: Training was interrupted
+    elif (stop.get_state() == 1): 
+        # Update the model info that the model was interrupted
+        with SqliteDict('./distilBERT.sqlite') as db:
+            model_info = db[model_id]
+            model_info['status'] = 'interrupted'
+            db[model_id] = model_info
+            db.commit()
 
-            # Update the model info is trained
-            with SqliteDict('./distilBERT.sqlite') as db:
-                model_info = db[model_id]
-                model_info['status'] = 'trained'
-                db[model_id] = model_info
-                db.commit()
+        logging.info(f'Training of model {model_id} was interrupted.')
 
-            # Run final evaluation
-            trainer.evaluate()
+    # Case: Training interrupted and model to be deleted
+    else:
+        delete_model(model_id)
 
-            logging.info(f'Training for model {model_id} finished.')
-
-        # Case: Training was interrupted
-        elif (stop.get_state() == 1): 
-            # Update the model info that the model was interrupted
-            with SqliteDict('./distilBERT.sqlite') as db:
-                model_info = db[model_id]
-                model_info['status'] = 'interrupted'
-                db[model_id] = model_info
-                db.commit()
-
-            logging.info(f'Training of model {model_id} was interrupted.')
-
-        # Case: Training interrupted and model to be deleted
-        else:
-            delete_model(model_id)
-
-            logging.info(f'Training of model {model_id} was interrupted and the model was deleted.')
+        logging.info(f'Training of model {model_id} was interrupted and the model was deleted.')
 
 
 # Call this method evaluate a model
 def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
-    if not os.path.isfile(f'models/{model_id}.pth'):
-        logging.error(f'Model {model_id} does not exist.')
+    #check for correct status
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or check_model(model_id):
+        # todo: some error message
+        return
 
     # Get the training Arguments
     training_args = get_training_args(model_id)
@@ -248,8 +248,10 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService)
 
 # Call this method to predict with a model
 def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
-    if not os.path.isfile(f'models/{model_id}.pth'):
-        logging.error(f'Model {model_id} does not exist.')
+    #check for correct status
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or check_model(model_id):
+        # todo: some error message
+        return
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = SqliteDict('./distilBERT.sqlite')[model_id]['num_labels'])
