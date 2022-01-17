@@ -15,7 +15,7 @@ from src.bunny import BunnyPostalService
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
-def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService):
+def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, current_model_id):
     logging.debug('Training thread alive')
     while True:
         # If queue is empty: wait a second and check again
@@ -27,6 +27,9 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService):
 
             # Get the model id and op type from the first element in the queue.
             model_id, op_type = q.get().get_info()
+
+            # set current model id
+            current_model_id = model_id
 
             logging.info(f'Got model {model_id} with operation type {op_type} from the queue')
 
@@ -40,6 +43,8 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService):
                 predict_with_model(model_id, stop, bux)
             else:
                 logging.error(f'Wrong operation type {op_type} for model {model_id}')
+
+            current_model_id = None
 
 # Call this method to train a new model
 def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):

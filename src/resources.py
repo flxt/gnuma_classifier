@@ -39,6 +39,11 @@ def abort_wrong_op_type(model_id: str, op_type: str, status: str):
 # API enpoint where only a model ID is given
 class Base(Resource):
 
+    #init ressource
+    # init the resource
+    def __init__(self, current_model_id: str):
+        self._current_model_id = current_model_id
+
     # Return the decription and more info for the model with the given id
     def get(self, model_id: str):
         # check if model exists
@@ -58,6 +63,9 @@ class Base(Resource):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
+
+        if self._current_model_id == model_id:
+            abort(400, message = f'Can not delete model {model_id} cause it is currently getting trained.')
 
         delete_model(model_id)
 

@@ -32,6 +32,9 @@ if __name__ == '__main__':
     # global interrupt vairable
     stop = InterruptState()
 
+    # global variable storing the id of the currently trained model
+    current_model_id = None
+
     # init the bunny postal service
     bux = BunnyPostalService()
 
@@ -43,13 +46,13 @@ if __name__ == '__main__':
     q = Queue()
 
     # start thread for running model
-    t = Thread(target = training_thread, args=(q, stop, bux, ))
+    t = Thread(target = training_thread, args=(q, stop, bux, current_model_id,))
     t.start()
 
     # Add the RestFULL Resources to the api
     api.add_resource(Base, '/distilbert/models/<model_id>', resource_class_kwargs ={'que' : q})
-    api.add_resource(Interrupt, '/distilbert/interrupt', resource_class_kwargs ={'stop' : stop})
-    api.add_resource(Pause, '/distilbert/pause', resource_class_kwargs ={'stop' : stop})
+    api.add_resource(Interrupt, '/distilbert/interrupt', resource_class_kwargs ={'stop' : stop, 'current_model_id': current_model_id})
+    api.add_resource(Pause, '/distilbert/pause', resource_class_kwargs ={'stop' : stop, 'current_model_id': current_model_id})
     api.add_resource(Predict, '/distilbert/predict/<model_id>', resource_class_kwargs ={'que' : q})
     api.add_resource(Evaluate, '/distilbert/evaluate/<model_id>', resource_class_kwargs ={'que' : q})
     api.add_resource(Continue, '/distilbert/continue/<model_id>', resource_class_kwargs ={'que' : q})
