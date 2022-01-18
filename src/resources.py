@@ -137,7 +137,7 @@ class Predict(Resource):
         self._op_type = 'predict'
 
     # Predict data wiht a specified model
-    def get(self, model_id: str):
+    def post(self, model_id: str):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
@@ -162,7 +162,7 @@ class Evaluate(Resource):
         self._op_type = 'evaluate'
 
     # Evaluate the model with the given data and return some performance information
-    def get(self, model_id: str):
+    def post(self, model_id: str):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
@@ -219,6 +219,7 @@ class Train(Resource):
         # Save the model info
         with SqliteDict('./distilBERT.sqlite') as db:
             req['model_id'] = model_id
+            req['status'] = 'in_que'
             db[model_id] = req
             db.commit()
 

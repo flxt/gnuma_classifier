@@ -1,4 +1,4 @@
-from transformers import Trainer
+from transformers import Trainer, AutoModelForTokenClassification
 import torch
 
 from sqlitedict import SqliteDict
@@ -9,8 +9,8 @@ import logging
 import os
 import json
 
-from src.training_utils import DataHelper, get_training_args, InterruptCallback, EvaluateCallback
-from src.utils import InterruptState, remove_checkpoints, delete_model
+from src.training_utils import DataHelper, get_training_args, InterruptCallback, EvaluateCallback, compute_metrics
+from src.utils import InterruptState, remove_checkpoints, delete_model, check_model
 from src.bunny import BunnyPostalService
 
 # method that should be run as thread for training models
@@ -83,7 +83,8 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
             eval_dataset = data['test'],
             data_collator = dh.data_collator,
             tokenizer = dh.tokenizer,
-            callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)]
+            callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)],
+            compute_metrics = compute_metrics
             )
 
     # Update the model info that the model is training
@@ -143,7 +144,8 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
     cp_list.sort(reverse = True)
 
     #check for correct status
-    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted' or check_model(model_id):
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted' or not check_model(model_id):
+        logging.error(f'model {model_id} cant be continued')
         # todo: some error message
         return
 
@@ -162,7 +164,8 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
             eval_dataset = data['test'],
             data_collator = dh.data_collator,
             tokenizer = dh.tokenizer,
-            callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)]
+            callbacks = [InterruptCallback(stop), EvaluateCallback(bux, model_id)],
+            compute_metrics = compute_metrics
             )
 
     # Update the model info that the model is training
@@ -219,7 +222,8 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
 # Call this method evaluate a model
 def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
     #check for correct status
-    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or check_model(model_id):
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
+        logging.error(f'model {model_id} cant be evaluated')
         # todo: some error message
         return
 
@@ -242,11 +246,21 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService)
         model = model,
         args = training_args,
         data_collator = dh.data_collator,
-        tokenizer = dh.tokenizer
+        tokenizer = dh.tokenizer,
+        compute_metrics = compute_metrics
         )
 
     # Run the Evaluation
+    logging.info(f'Beginning evaluation for model {model_id}')
     out = trainer.evaluate(eval_dataset = data['train'])
+
+    metrics = {}
+    metrics['eval_loss'] = out['eval_loss']
+    metrics['eval_accuracy'] = out['eval_accuracy']
+    metrics['eval_f1'] = out['eval_f1']
+
+
+    bux.deliver_eval_results(model_id, metrics)
 
     logging.info(f'Evaluated model {model_id}.')
 
@@ -254,7 +268,8 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService)
 # Call this method to predict with a model
 def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
     #check for correct status
-    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or check_model(model_id):
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
+        logging.error(f'model {model_id} cant be predicted')
         # todo: some error message
         return
 

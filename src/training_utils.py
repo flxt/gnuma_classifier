@@ -1,9 +1,11 @@
 from datasets import load_dataset
+from sklearn.metrics import accuracy_score, f1_score
 from transformers import AutoTokenizer, DataCollatorForTokenClassification
 from transformers import AutoModelForTokenClassification, TrainingArguments
 from transformers import TrainerCallback
 
 from sqlitedict import SqliteDict
+import numpy as np
 
 import logging
 
@@ -96,12 +98,14 @@ class EvaluateCallback(TrainerCallback):
     def __init__(self, bux: BunnyPostalService, model_id: str):
         self._bux = bux
         self._model_id = model_id
-        self._metrics = {'eval_loss': -1}
+        self._metrics = {'eval_loss': -1, 'eval_accuracy': -1, 'eval_f1': -1}
         self._finished = False
 
     # check after every training step if training should stop
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         self._metrics['eval_loss'] = metrics['eval_loss']
+        self._metrics['eval_accuracy'] = metrics['eval_accuracy']
+        self._metrics['eval_f1'] = metrics['eval_f1']
 
         self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
 
@@ -110,5 +114,25 @@ class EvaluateCallback(TrainerCallback):
         self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
 
     def on_train_end(self, args, state, control, **kwargs):
-        control.should_evaluate = True
         self._finished = True
+
+
+# method computing the metrics
+def compute_metrics(pred):
+    labels = pred.label_ids.flatten()
+
+    preds = pred.predictions.argmax(-1).flatten()
+    
+    for idx, val in enumerate(labels):
+        if val == -100:
+            preds[idx] = -100
+
+
+    logging.info(preds)
+    logging.info(labels)
+    f1 = f1_score(labels.flatten(), preds.flatten(), average = 'macro')
+    acc = accuracy_score(labels.flatten(), preds.flatten())
+    return {
+        'accuracy': acc,
+        'f1': f1
+    }

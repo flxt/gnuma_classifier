@@ -48,3 +48,13 @@ class BunnyPostalService():
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 'finished': finished, 'current_step': current_step, 'total_steps': total_steps, 'epoch': epoch, 'metrics': metric_list}
 
         self.send_message(message)
+
+    def deliver_eval_results(self, model_id, metrics):
+        metric_list = []
+
+        for key, value in metrics.items():
+            metric_list.append({'key':key, 'value':value})
+
+        message = {'classifier_id': 'distilbert', 'model_id': model_id, 'metrics': metric_list}
+
+        self.send_message(message)

@@ -33,7 +33,8 @@
 			"value_list": null,
 			"optional": true,
 			"default": 500,
-			"description": "After this number of steps a checkpoint is made."
+			"description": "After this number of steps a checkpoint is made.",
+			"min": 100
 		},
 		{
 			"name": "batch_size",
@@ -41,7 +42,8 @@
 			"value_list": null,
 			"optional": true,
 			"default": 16,
-			"description": "The batch size for training and evaluation"
+			"description": "The batch size for training and evaluation",
+			"min": 1
 		},
 		{
 			"name": "learning_rate",
@@ -49,7 +51,9 @@
 			"value_list": null,
 			"optional": true,
 			"default": 2e-5,
-			"description": "The learning rate during training."
+			"description": "The learning rate during training.",
+			"min":1e-10,
+			"max": 0.1
 		},
 		{
 			"name": "epochs",
@@ -57,7 +61,8 @@
 			"value_list": null,
 			"optional": true,
 			"default": 3.0,
-			"description": "The number of training epochs."
+			"description": "The number of training epochs.",
+			"min": 1.0
 		},
 		{
 			"name": "warmup_ratio",
@@ -65,7 +70,9 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.0,
-			"description": "The ratio of training steps used for warmup."
+			"description": "The ratio of training steps used for warmup.",
+			"min": 0.0,
+			"max": 1.0
 		},
 		{
 			"name": "adam_weigth_decay",
@@ -73,7 +80,8 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.0,
-			"description": "Weight decay for AdamW optimizer."
+			"description": "Weight decay for AdamW optimizer.",
+			"min": 0.0
 		},
 		{
 			"name": "adam_beta1",
@@ -81,7 +89,9 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.9,
-			"description": "Beta1 for AdamW optimizer."
+			"description": "Beta1 for AdamW optimizer.",
+			"min": 0.8,
+			"max": 0.99
 		},
 		{
 			"name": "adam_beta2",
@@ -89,7 +99,9 @@
 			"value_list": null,
 			"optional": true,
 			"default": 0.999,
-			"description": "Beta2 for AdamW optimizer. Setting this to 0.998 is recommended for large batch sizes."
+			"description": "Beta2 for AdamW optimizer. Setting this to 0.998 is recommended for large batch sizes.",
+			"min": 0.99,
+			"max": 0.9999
 		},
 				{
 			"name": "adam_epsilon",
@@ -97,7 +109,9 @@
 			"value_list": null,
 			"optional": true,
 			"default": 1e-8,
-			"description": "Epsilon for AdamW optimizer."
+			"description": "Epsilon for AdamW optimizer.",
+			"min": 1e-12,
+			"max": 1e-4
 		}
 	]
 }
