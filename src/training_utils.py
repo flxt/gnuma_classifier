@@ -45,7 +45,7 @@ class DataHelper():
     # get the data and prepare it for 
     # for now it only loads the wnut_17 data set
     def get_data(self, model_id):
-        wnut = load_dataset('wnut_17')
+        wnut = load_dataset('conll2003')
 
         data = wnut.map(self.tokenize_and_align_labels, batched=True)
         num_labels = len(wnut["train"].features[f"ner_tags"].feature.names)

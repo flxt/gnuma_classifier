@@ -1,4 +1,4 @@
-from transformers import Trainer, AutoModelForTokenClassification
+from transformers import Trainer, AutoModelForTokenClassification, AutoTokenizer
 import torch
 
 from sqlitedict import SqliteDict
@@ -26,7 +26,8 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, cur
             stop.set_state(0)
 
             # Get the model id and op type from the first element in the queue.
-            model_id, op_type = q.get().get_info()
+            ele = q.get()
+            model_id, op_type = ele.get_info()
 
             # set current model id
             current_model_id = model_id
@@ -38,9 +39,14 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, cur
             elif (op_type == 'continue'):
                 continue_training_model(model_id, stop, bux)
             elif (op_type == 'evaluate'):
-                evaluate_model(model_id, stop, bux)
+                data_id = ele.get_text()
+                evaluate_model(model_id, stop, bux, data_id)
+            elif (op_type == 'predict_text'):
+                text = ele.get_text() 
+                predict_text(model_id, stop, bux, text)
             elif (op_type == 'predict'):
-                predict_with_model(model_id, stop, bux)
+                doc_id =  ele.get_text()
+                predict_data(model_id, stop, bux, doc_id)
             else:
                 logging.error(f'Wrong operation type {op_type} for model {model_id}')
 
@@ -220,7 +226,7 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
 
 
 # Call this method evaluate a model
-def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
+def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService, data_id: str):
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
         logging.error(f'model {model_id} cant be evaluated')
@@ -265,8 +271,8 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService)
     logging.info(f'Evaluated model {model_id}.')
 
 
-# Call this method to predict with a model
-def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
+# Call this method to predict text with a model
+def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, sequence: str):
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
         logging.error(f'model {model_id} cant be predicted')
@@ -279,3 +285,47 @@ def predict_with_model(model_id: str, stop: InterruptState, bux: BunnyPostalServ
     # Load trained weights
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
     model.eval()
+
+    # load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
+
+    # convert input to tokens
+    inputs = tokenizer(sequence, return_tensors="pt")
+    tokens = inputs.tokens()
+
+    # get model output
+    outputs = model(**inputs).logits
+
+    # get actual predictions
+    predictions = torch.argmax(outputs, dim=2)
+
+    logging.info(f'Text prediction for model {model_id} done.')
+
+    # convert labeled data to a list of tuples
+    out_list = []
+    for token, prediction in zip(tokens, predictions[0].numpy()):
+        out_list.append((token, model.config.id2label[prediction]))
+
+    # bux send results to rabbit mq
+    bux.deliver_text_prediction(model_id, out_list)
+
+
+# Call this method to predict text with a model
+def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, doc_id: str):
+    #check for correct status
+    if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
+        logging.error(f'model {model_id} cant be predicted')
+        # todo: some error message
+        return
+
+    # Define a new model
+    model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels = SqliteDict('./distilBERT.sqlite')[model_id]['num_labels'])
+
+    # Load trained weights
+    model.load_state_dict(torch.load(f'models/{model_id}.pth'))
+    model.eval()
+
+    # load the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
+
+    # todo

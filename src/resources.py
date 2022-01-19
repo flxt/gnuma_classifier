@@ -129,6 +129,39 @@ class Interrupt(Resource):
 
 
 # API endpoint for classifying data wiht a specified model
+class PredictText(Resource):
+
+    # Init the resource
+    def __init__(self, que: Queue):
+        self._q = que
+        self._op_type = 'predict_text'
+
+    # Predict data wiht a specified model
+    def post(self, model_id: str):
+        # check if model exists
+        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+            abort_wrong_model_id(model_id)
+
+        if not check_model(model_id):
+            abort_faulty_model(model_id)
+
+        if not request.is_json:
+            return abort_not_json()
+
+        req = request.json
+
+        if 'sequence' not in req:
+            abort_missing_parameter('sequence')
+
+
+        # put prediction request in the que
+        self._q.put(QueueElement(model_id, self._op_type, req['sequence']))
+
+        logging.info(f'Put model {model_id} in queue for text prediction')
+
+        return {'model_id':model_id, 'operation':'predict'}
+
+# API endpoint for classifying data wiht a specified model
 class Predict(Resource):
 
     # Init the resource
@@ -145,8 +178,17 @@ class Predict(Resource):
         if not check_model(model_id):
             abort_faulty_model(model_id)
 
+        if not request.is_json:
+            return abort_not_json()
+
+        req = request.json
+
+        if 'data_id' not in req:
+            abort_missing_parameter('data_id')
+
+
         # put prediction request in the que
-        self._q.put(QueueElement(model_id, self._op_type))
+        self._q.put(QueueElement(model_id, self._op_type, req['data_id']))
 
         logging.info(f'Put model {model_id} in queue for prediction')
 
@@ -170,8 +212,16 @@ class Evaluate(Resource):
         if not check_model(model_id):
             abort_faulty_model(model_id)
 
+        if not request.is_json:
+            return abort_not_json()
+
+        req = request.json
+
+        if 'doc_id' not in req:
+            abort_missing_parameter('doc_id')
+
         # Put evaluation request in que
-        self._q.put(QueueElement(model_id, self._op_type))
+        self._q.put(QueueElement(model_id, self._op_type, doc_id))
 
         logging.info(f'Put model {model_id} in queue for evaluation')
 

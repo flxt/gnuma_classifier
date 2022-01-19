@@ -58,3 +58,13 @@ class BunnyPostalService():
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 'metrics': metric_list}
 
         self.send_message(message)
+
+    def deliver_text_prediction(self, model_id, result_list):
+        prediction_list = []
+
+        for token, label in result_list:
+            prediction_list.append({'token': token, 'label': label})
+
+        message = {'classifier_id': 'distilbert', 'model_id': model_id, 'predictions': prediction_list}
+
+        self.send_message(message)

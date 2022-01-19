@@ -10,7 +10,8 @@ import logging
 # train = Train new model
 # continue = Continue training a model
 # evaluate = Evaluate model
-# predict = Predict with model
+# predict_text = Predict with model
+# predict
 class QueueElement():
 
     # When initializing model_id and operation type have to be given.
@@ -18,9 +19,17 @@ class QueueElement():
         self._op_type = op_type
         self._model_id = model_id
 
+    def __init__(self, model_id, op_type, text):
+        self._op_type = op_type
+        self._model_id = model_id
+        self._text = text
+
     # Returns a tuple (model_id, op_type)
     def get_info(self):
         return (self._model_id, self._op_type)
+
+    def get_text(self):
+        return self._text
 
 # SAves the interrupt state
 class InterruptState():
