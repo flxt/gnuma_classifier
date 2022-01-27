@@ -4,26 +4,25 @@ from pika.exchange_type import ExchangeType
 import logging
 import json
 
+# read credentials from json on disk
+def read_credentials():
+    with open('./rabbitmq_creds.json') as json_file:
+        creds = json.load(json_file)
 
-class BunnyCredentials():
-    rabbit_mq_host = 'h2826957.stratoserver.net'
-    rabbit_mq_port = 5672
-    rabbit_mq_user = 'rabbitmqtest'
-    rabbit_mq_pass = 'rabbitmqtest'
-    rabbit_mq_exchange = 'test'
-    rabbit_mq_routing_key = 'Classifier.Distilbert'
-    rabbit_mq_queue = 'test_q'
+    return creds
 
 class BunnyPostalService():
 
     # Bunny says hello to rabbit.
     def __init__(self):
-        self._credentials = pika.PlainCredentials(BunnyCredentials.rabbit_mq_user, BunnyCredentials.rabbit_mq_pass)
-        self._connection_params = pika.ConnectionParameters(host=BunnyCredentials.rabbit_mq_host, port=BunnyCredentials.rabbit_mq_port, credentials=self._credentials)
+        creds = read_credentials()
+
+        self._credentials = pika.PlainCredentials(creds['rabbit_mq_user'], creds['rabbit_mq_pass'])
+        self._connection_params = pika.ConnectionParameters(host=creds['rabbit_mq_host'], port=creds['rabbit_mq_port'], credentials=self._credentials)
         self._connection = pika.BlockingConnection(self._connection_params)
         self._channel = self._connection.channel()
-        self._exchange = BunnyCredentials.rabbit_mq_exchange
-        self._routing_key = BunnyCredentials.rabbit_mq_routing_key
+        self._exchange = creds['rabbit_mq_exchange']
+        self._routing_key = creds['rabbit_mq_routing_key']
 
         self._channel.exchange_declare(exchange = self._exchange, exchange_type='fanout')
 
@@ -73,21 +72,23 @@ class BunnyPostalService():
 
 # Listening to rabbit to check if supposed to say hello
 def bunny_listening_thread(bux: BunnyPostalService):
+    creds = read_credentials()
+
     # conntect to bunny
-    credentials = pika.PlainCredentials(BunnyCredentials.rabbit_mq_user, BunnyCredentials.rabbit_mq_pass)
-    connection_params = pika.ConnectionParameters(host=BunnyCredentials.rabbit_mq_host, port=BunnyCredentials.rabbit_mq_port, credentials = credentials)
+    credentials = pika.PlainCredentials(creds['rabbit_mq_user'], creds['rabbit_mq_pass'])
+    connection_params = pika.ConnectionParameters(host=creds['rabbit_mq_host'], port=creds['rabbit_mq_port'], credentials = credentials)
     connection = pika.BlockingConnection(connection_params)
     channel = connection.channel()
-    exchange = BunnyCredentials.rabbit_mq_exchange
-    routing_key = BunnyCredentials.rabbit_mq_routing_key
-    channel.queue_declare(queue = BunnyCredentials.rabbit_mq_queue)
+    exchange = creds['rabbit_mq_exchange']
+    routing_key = creds['rabbit_mq_routing_key']
+    channel.queue_declare(queue = creds['rabbit_mq_queue'])
 
     def bunny_callback(ch, method, properties, body):
         #check if supposed to send hello message
         if True:
             bux.say_hello()
 
-    channel.basic_consume(queue=BunnyCredentials.rabbit_mq_queue, on_message_callback=bunny_callback, auto_ack=True)
+    channel.basic_consume(queue=creds['rabbit_mq_queue'], on_message_callback=bunny_callback, auto_ack=True)
 
     # catch keyboard interrupts
     try:
