@@ -12,6 +12,7 @@ class BunnyCredentials():
     rabbit_mq_pass = 'rabbitmqtest'
     rabbit_mq_exchange = 'test'
     rabbit_mq_routing_key = 'Classifier.Distilbert'
+    rabbit_mq_queue = 'test_q'
 
 class BunnyPostalService():
 
@@ -68,3 +69,29 @@ class BunnyPostalService():
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 'predictions': prediction_list}
 
         self.send_message(message)
+
+
+# Listening to rabbit to check if supposed to say hello
+def bunny_listening_thread(bux: BunnyPostalService):
+    # conntect to bunny
+    credentials = pika.PlainCredentials(BunnyCredentials.rabbit_mq_user, BunnyCredentials.rabbit_mq_pass)
+    connection_params = pika.ConnectionParameters(host=BunnyCredentials.rabbit_mq_host, port=BunnyCredentials.rabbit_mq_port, credentials = credentials)
+    connection = pika.BlockingConnection(connection_params)
+    channel = connection.channel()
+    exchange = BunnyCredentials.rabbit_mq_exchange
+    routing_key = BunnyCredentials.rabbit_mq_routing_key
+    channel.queue_declare(queue = BunnyCredentials.rabbit_mq_queue)
+
+    def bunny_callback(ch, method, properties, body):
+        #check if supposed to send hello message
+        if True:
+            bux.say_hello()
+
+    channel.basic_consume(queue=BunnyCredentials.rabbit_mq_queue, on_message_callback=bunny_callback, auto_ack=True)
+
+    # catch keyboard interrupts
+    try:
+        channel.start_consuming()
+    except (KeyboardInterrupt, SystemExit):
+        print('Shutting down bunny listening thread.')
+

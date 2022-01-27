@@ -6,13 +6,17 @@ from queue import Queue
 from threading import Thread
 import logging
 import json
+import sys
+import os 
 
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate, Continue, List, Train, Predict
 from src.training import training_thread
 from src.utils import InterruptState, check_model, delete_model
-from src.bunny import BunnyPostalService
+from src.bunny import BunnyPostalService, bunny_listening_thread
 
-if __name__ == '__main__':
+def main():
+    print("Starting server. Press ctrl + C to quit.")
+
     # Delete all models that are in a faulty state
     keys = SqliteDict('./distilBERT.sqlite').keys()
     for model_id in keys:
@@ -20,7 +24,7 @@ if __name__ == '__main__':
 
     # set logging lvl
     logging.basicConfig()
-    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().setLevel(logging.WARNING)
 
     # set interrupt vairable
     stop = InterruptState()
@@ -40,6 +44,7 @@ if __name__ == '__main__':
 
     # start thread for running model
     t = Thread(target = training_thread, args=(q, stop, bux, current_model_id,))
+    t.daemon = True
     t.start()
 
     # Add the RestFULL Resources to the api
@@ -56,5 +61,20 @@ if __name__ == '__main__':
     # Say Hello to RabbitMQ
     bux.say_hello()
 
+    #start listening
+    t2 = Thread(target = bunny_listening_thread, args = (bux,))
+    t2.daemon = True
+    t2.start()
+
     # Start the APP
     app.run(debug=True, use_reloader=False)
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        print('Received KeyboardInterrupt. Shutting Down.')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)

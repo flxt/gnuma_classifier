@@ -17,40 +17,45 @@ from src.bunny import BunnyPostalService
 # it is given the q with the models that are supposed to be trained
 def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, current_model_id):
     logging.debug('Training thread alive')
-    while True:
-        # If queue is empty: wait a second and check again
-        if q.empty():
-            time.sleep(1)
-        else:
-            # reset stop
-            stop.set_state(0)
-
-            # Get the model id and op type from the first element in the queue.
-            ele = q.get()
-            model_id, op_type = ele.get_info()
-
-            # set current model id
-            current_model_id = model_id
-
-            logging.info(f'Got model {model_id} with operation type {op_type} from the queue')
-
-            if (op_type == 'train'):
-                train_new_model(model_id, stop, bux)
-            elif (op_type == 'continue'):
-                continue_training_model(model_id, stop, bux)
-            elif (op_type == 'evaluate'):
-                data_id = ele.get_text()
-                evaluate_model(model_id, stop, bux, data_id)
-            elif (op_type == 'predict_text'):
-                text = ele.get_text() 
-                predict_text(model_id, stop, bux, text)
-            elif (op_type == 'predict'):
-                doc_id =  ele.get_text()
-                predict_data(model_id, stop, bux, doc_id)
+    
+    #check for keyboard interrupt:
+    try:
+        while True:
+            # If queue is empty: wait a second and check again
+            if q.empty():
+                time.sleep(1)
             else:
-                logging.error(f'Wrong operation type {op_type} for model {model_id}')
+                # reset stop
+                stop.set_state(0)
 
-            current_model_id = None
+                # Get the model id and op type from the first element in the queue.
+                ele = q.get()
+                model_id, op_type = ele.get_info()
+
+                # set current model id
+                current_model_id = model_id
+
+                logging.info(f'Got model {model_id} with operation type {op_type} from the queue')
+
+                if (op_type == 'train'):
+                    train_new_model(model_id, stop, bux)
+                elif (op_type == 'continue'):
+                    continue_training_model(model_id, stop, bux)
+                elif (op_type == 'evaluate'):
+                    data_id = ele.get_text()
+                    evaluate_model(model_id, stop, bux, data_id)
+                elif (op_type == 'predict_text'):
+                    text = ele.get_text() 
+                    predict_text(model_id, stop, bux, text)
+                elif (op_type == 'predict'):
+                    doc_id =  ele.get_text()
+                    predict_data(model_id, stop, bux, doc_id)
+                else:
+                    logging.error(f'Wrong operation type {op_type} for model {model_id}')
+
+                current_model_id = None
+    except (KeyboardInterrupt, SystemExit):
+        print('Shutting down training thread.')
 
 # Call this method to train a new model
 def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
