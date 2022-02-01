@@ -298,6 +298,8 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, s
     inputs = tokenizer(sequence, return_tensors="pt")
     tokens = inputs.tokens()
 
+    logging.info(inputs)
+
     # get model output
     outputs = model(**inputs).logits
 
@@ -317,6 +319,8 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, s
 
 # Call this method to predict text with a model
 def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, doc_id: str):
+    logging.info('In predict data.')
+
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
         logging.error(f'model {model_id} cant be predicted')
@@ -330,7 +334,8 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, d
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
     model.eval()
 
-    # load the tokenizer
-    tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
-
     # todo
+    dh = DataHelper()
+    data, num_labels = dh.get_data(model_id)
+
+    logging.info(data['test'])

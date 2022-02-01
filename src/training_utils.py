@@ -119,19 +119,20 @@ class EvaluateCallback(TrainerCallback):
 
 # method computing the metrics
 def compute_metrics(pred):
+    #flatten the arrays
     labels = pred.label_ids.flatten()
-
     preds = pred.predictions.argmax(-1).flatten()
+
+    #remove the padding
+    preds = preds[labels != -100]
+    labels = labels[labels != -100]
+
+    #calculate the accuracy
+    acc = accuracy_score(labels, preds)
     
-    for idx, val in enumerate(labels):
-        if val == -100:
-            preds[idx] = -100
+    # calculate f1 score
+    f1 = f1_score(labels, preds, average = 'macro')
 
-
-    logging.info(preds)
-    logging.info(labels)
-    f1 = f1_score(labels.flatten(), preds.flatten(), average = 'macro')
-    acc = accuracy_score(labels.flatten(), preds.flatten())
     return {
         'accuracy': acc,
         'f1': f1

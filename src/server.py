@@ -24,7 +24,7 @@ def main():
 
     # set logging lvl
     logging.basicConfig()
-    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger().setLevel(logging.INFO)
 
     # set interrupt vairable
     stop = InterruptState()

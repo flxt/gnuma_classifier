@@ -15,11 +15,7 @@ import logging
 class QueueElement():
 
     # When initializing model_id and operation type have to be given.
-    def __init__(self, model_id, op_type):
-        self._op_type = op_type
-        self._model_id = model_id
-
-    def __init__(self, model_id, op_type, text):
+    def __init__(self, model_id, op_type, text = None):
         self._op_type = op_type
         self._model_id = model_id
         self._text = text
