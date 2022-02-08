@@ -7,16 +7,14 @@ from transformers import TrainerCallback
 from sqlitedict import SqliteDict
 import numpy as np
 
-import logging
-
 from src.bunny import BunnyPostalService
-from src.utils import InterruptState
+from src.utils import InterruptState, log
 
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
-    logging.debug(f'Returning training arguments based on kv-store info for model {model_id}')
+    log(f'Returning training arguments based on kv-store info for model {model_id}', 'DEBUG')
 
     return TrainingArguments(
         output_dir = f'./checkpoints/{model_id}',
@@ -40,7 +38,7 @@ class DataHelper():
     def __init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
-        logging.debug('Set up tokenizer and data collector')
+        log('Set up tokenizer and data collector', 'DEBUG')
 
     # get the data and prepare it for 
     # for now it only loads the wnut_17 data set
@@ -50,7 +48,7 @@ class DataHelper():
         data = wnut.map(self.tokenize_and_align_labels, batched=True)
         num_labels = len(wnut["train"].features[f"ner_tags"].feature.names)
 
-        logging.debug(f'Prepared data for model {model_id}')
+        log(f'Prepared data for model {model_id}', 'DEBUG')
 
         return data, num_labels
 
@@ -75,7 +73,7 @@ class DataHelper():
 
         tokenized_inputs["labels"] = labels
 
-        logging.debug('Tokenizeda and alligned labels')
+        log('Tokenized and alligned labels', 'DEBUG')
         return tokenized_inputs
 
 #callback that check if training is supposed to be interrupted

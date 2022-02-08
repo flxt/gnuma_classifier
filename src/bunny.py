@@ -1,8 +1,8 @@
 import pika
 from pika.exchange_type import ExchangeType
 
-import logging
 import json
+from src.utils import log
 
 # read credentials from json on disk
 def read_credentials():
@@ -28,7 +28,7 @@ class BunnyPostalService():
 
     # The BunnyPostalServices delivers your message to the distilbert exchange.
     def send_message(self, message):
-        logging.info(f'Send to exchange: {message}')
+        log(f'Send to exchange: {message}')
         self._channel.basic_publish(exchange = self._exchange, routing_key = self._routing_key, body = json.dumps(message))
 
     # The BunnyPostalService introduces the Microservice to the exchange

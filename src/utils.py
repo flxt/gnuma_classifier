@@ -44,7 +44,7 @@ class InterruptState():
 def remove_checkpoints(model_id):
     if os.path.isdir(f'./checkpoints/{model_id}'):
         shutil.rmtree('./checkpoints/' + model_id)
-        logging.debug('Removed checkpoints')
+        log('Removed checkpoints', 'DEBUG')
 
 # Deletes the model with model_id
 # Tries to delete saved model, checkpoint, and the kv-store entry.
@@ -57,19 +57,19 @@ def delete_model(model_id):
         model_info = db.pop(model_id)
         db.commit()
 
-    logging.debug(f'Deleted model {model_id} from kv-store')
+    log(f'Deleted model {model_id} from kv-store', 'DEBUG')
 
     # delete model file
     if os.path.isfile(f'models/{model_id}.pth'):
         os.remove(f'models/{model_id}.pth')
 
-        logging.debug(f'Deleted model {model_id} from harddrive')
+        log(f'Deleted model {model_id} from harddrive', 'DEBUG')
 
     # remove the checkpoints
     if os.path.isdir(f'./checkpoints/{model_id}'):
         shutil.rmtree(f'./checkpoints/{model_id}')
 
-        logging.debug(f'Deleted model {model_id} checkpoints')
+        log(f'Deleted model {model_id} checkpoints', 'DEBUG')
 
     return model_info
 
@@ -94,3 +94,17 @@ def check_model(model_id):
         delete_model(model_id)
 
     return good
+
+
+# Logging method
+def log(message, log_type = 'INFO'):
+    if log_type == 'INFO':
+        logging.info(message)
+    elif log_type == 'DEBUG':
+        logging.debug(message)
+    elif log_type == 'ERROR':
+        logging.error(message)
+    elif log_type == 'WARNING':
+        logging.warning(message)
+    else:
+        logging.error('Unkwon log type.')

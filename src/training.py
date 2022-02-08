@@ -5,57 +5,53 @@ from sqlitedict import SqliteDict
 
 from queue import Queue
 import time
-import logging
 import os
 import json
 
 from src.training_utils import DataHelper, get_training_args, InterruptCallback, EvaluateCallback, compute_metrics
-from src.utils import InterruptState, remove_checkpoints, delete_model, check_model
+from src.utils import InterruptState, remove_checkpoints, delete_model, check_model, log
 from src.bunny import BunnyPostalService
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
 def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, current_model_id):
-    logging.debug('Training thread alive')
+    log('Training thread alive', 'DEBUG')
     
-    #check for keyboard interrupt:
-    try:
-        while True:
-            # If queue is empty: wait a second and check again
-            if q.empty():
-                time.sleep(1)
+    while True:
+        # If queue is empty: wait a second and check again
+        if q.empty():
+            time.sleep(1)
+        else:
+            # reset stop
+            stop.set_state(0)
+
+            # Get the model id and op type from the first element in the queue.
+            ele = q.get()
+            model_id, op_type = ele.get_info()
+
+            # set current model id
+            current_model_id = model_id
+
+            log(f'Got model {model_id} with operation type {op_type} from the queue')
+
+            if (op_type == 'train'):
+                train_new_model(model_id, stop, bux)
+            elif (op_type == 'continue'):
+                continue_training_model(model_id, stop, bux)
+            elif (op_type == 'evaluate'):
+                data_id = ele.get_text()
+                evaluate_model(model_id, stop, bux, data_id)
+            elif (op_type == 'predict_text'):
+                text = ele.get_text() 
+                predict_text(model_id, stop, bux, text)
+            elif (op_type == 'predict'):
+                doc_id =  ele.get_text()
+                predict_data(model_id, stop, bux, doc_id)
             else:
-                # reset stop
-                stop.set_state(0)
+                log(f'Wrong operation type {op_type} for model {model_id}', 'ERROR')
 
-                # Get the model id and op type from the first element in the queue.
-                ele = q.get()
-                model_id, op_type = ele.get_info()
+            current_model_id = None
 
-                # set current model id
-                current_model_id = model_id
-
-                logging.info(f'Got model {model_id} with operation type {op_type} from the queue')
-
-                if (op_type == 'train'):
-                    train_new_model(model_id, stop, bux)
-                elif (op_type == 'continue'):
-                    continue_training_model(model_id, stop, bux)
-                elif (op_type == 'evaluate'):
-                    data_id = ele.get_text()
-                    evaluate_model(model_id, stop, bux, data_id)
-                elif (op_type == 'predict_text'):
-                    text = ele.get_text() 
-                    predict_text(model_id, stop, bux, text)
-                elif (op_type == 'predict'):
-                    doc_id =  ele.get_text()
-                    predict_data(model_id, stop, bux, doc_id)
-                else:
-                    logging.error(f'Wrong operation type {op_type} for model {model_id}')
-
-                current_model_id = None
-    except (KeyboardInterrupt, SystemExit):
-        print('Shutting down training thread.')
 
 # Call this method to train a new model
 def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
@@ -74,7 +70,7 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
         db[model_id] = model_info
         db.commit()
 
-    logging.debug(f'Updated the info for model {model_id} with default values if necessary')
+    log(f'Updated the info for model {model_id} with default values if necessary', 'DEBUG')
 
     # Get the training Arguments
     training_args = get_training_args(model_id)
@@ -107,7 +103,7 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
         db.commit()
 
     # Start training the model if no interruption
-    logging.info(f'Starting the training for model {model_id}')
+    log(f'Starting the training for model {model_id}')
     trainer.train()
 
     # Training done
@@ -128,7 +124,7 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
 
         trainer.evaluate()
 
-        logging.info(f'Training for model {model_id} finished.')
+        log(f'Training for model {model_id} finished.')
 
     # Case: Training was interrupted
     elif (stop.get_state() == 1): 
@@ -139,13 +135,13 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
             db[model_id] = model_info
             db.commit()
 
-        logging.info(f'Training of model {model_id} was interrupted.')
+        log(f'Training of model {model_id} was interrupted.')
 
     # Case: Training interrupted and model to be deleted
     else:
         delete_model(model_id)
 
-        logging.info(f'Training of model {model_id} was interrupted and the model was deleted.')
+        log(f'Training of model {model_id} was interrupted and the model was deleted.')
 
 # Call this method to continue the training of a model.
 def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPostalService):
@@ -156,7 +152,7 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
 
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted' or not check_model(model_id):
-        logging.error(f'model {model_id} cant be continued')
+        log(f'model {model_id} cant be continued', 'ERROR')
         # todo: some error message
         return
 
@@ -188,7 +184,7 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
         db.commit()
 
     # Continue training the model if no interruption
-    logging.info(f'Continueing the training for model {model_id}')
+    log(f'Continueing the training for model {model_id}')
     trainer.train(f'./checkpoints/{cp_list[0]}')
 
     # Training done
@@ -210,7 +206,7 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
         # Run final evaluation
         trainer.evaluate()
 
-        logging.info(f'Training for model {model_id} finished.')
+        log(f'Training for model {model_id} finished.')
 
     # Case: Training was interrupted
     elif (stop.get_state() == 1): 
@@ -221,20 +217,20 @@ def continue_training_model(model_id: str, stop: InterruptState, bux: BunnyPosta
             db[model_id] = model_info
             db.commit()
 
-        logging.info(f'Training of model {model_id} was interrupted.')
+        log(f'Training of model {model_id} was interrupted.')
 
     # Case: Training interrupted and model to be deleted
     else:
         delete_model(model_id)
 
-        logging.info(f'Training of model {model_id} was interrupted and the model was deleted.')
+        log(f'Training of model {model_id} was interrupted and the model was deleted.')
 
 
 # Call this method evaluate a model
 def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService, data_id: str):
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
-        logging.error(f'model {model_id} cant be evaluated')
+        log(f'model {model_id} cant be evaluated', 'ERROR')
         # todo: some error message
         return
 
@@ -262,7 +258,7 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService,
         )
 
     # Run the Evaluation
-    logging.info(f'Beginning evaluation for model {model_id}')
+    log(f'Beginning evaluation for model {model_id}')
     out = trainer.evaluate(eval_dataset = data['train'])
 
     metrics = {}
@@ -273,14 +269,14 @@ def evaluate_model(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     bux.deliver_eval_results(model_id, metrics)
 
-    logging.info(f'Evaluated model {model_id}.')
+    log(f'Evaluated model {model_id}.')
 
 
 # Call this method to predict text with a model
 def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, sequence: str):
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
-        logging.error(f'model {model_id} cant be predicted')
+        log(f'model {model_id} cant be predicted', 'ERROR')
         # todo: some error message
         return
 
@@ -298,7 +294,7 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, s
     inputs = tokenizer(sequence, return_tensors="pt")
     tokens = inputs.tokens()
 
-    logging.info(inputs)
+    log(inputs, 'DEBUG')
 
     # get model output
     outputs = model(**inputs).logits
@@ -306,7 +302,7 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, s
     # get actual predictions
     predictions = torch.argmax(outputs, dim=2)
 
-    logging.info(f'Text prediction for model {model_id} done.')
+    log(f'Text prediction for model {model_id} done.')
 
     # convert labeled data to a list of tuples
     out_list = []
@@ -319,8 +315,6 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, s
 
 # Call this method to predict text with a model
 def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, doc_id: str):
-    logging.info('In predict data.')
-
     #check for correct status
     if SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' or not check_model(model_id):
         logging.error(f'model {model_id} cant be predicted')
@@ -338,4 +332,4 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, d
     dh = DataHelper()
     data, num_labels = dh.get_data(model_id)
 
-    logging.info(data['test'])
+    log(data['test'])
