@@ -98,6 +98,7 @@ def check_model(model_id):
 
 # Logging method
 def log(message, log_type = 'INFO'):
+    #normal logging
     if log_type == 'INFO':
         logging.info(message)
     elif log_type == 'DEBUG':

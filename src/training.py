@@ -7,6 +7,7 @@ from queue import Queue
 import time
 import os
 import json
+import dill
 
 from src.training_utils import DataHelper, get_training_args, InterruptCallback, EvaluateCallback, compute_metrics
 from src.utils import InterruptState, remove_checkpoints, delete_model, check_model, log
@@ -27,6 +28,11 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, cur
 
             # Get the model id and op type from the first element in the queue.
             ele = q.get()
+
+            # save que to disk
+            with open('que.obj','wb') as queue_save_file:
+                dill.dump(q, queue_save_file)
+
             model_id, op_type = ele.get_info()
 
             # set current model id

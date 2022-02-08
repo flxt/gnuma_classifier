@@ -6,6 +6,7 @@ import uuid
 
 from queue import Queue
 import os
+import dill
 
 from src.utils import InterruptState, QueueElement, delete_model, check_model, log
 
@@ -94,6 +95,10 @@ class Continue(Resource):
         # put training request in the que
         self._q.put(QueueElement(model_id, self._op_type))
 
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
         log(f'Put model {model_id} in queue to continue training')
 
         return {'model_id':model_id, 'operation':'continue'}
@@ -156,6 +161,9 @@ class PredictText(Resource):
         # put prediction request in the que
         self._q.put(QueueElement(model_id, self._op_type, req['sequence']))
 
+        # save que to disk
+        with open('que.obj', 'wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
         log(f'Put model {model_id} in queue for text prediction')
 
         return {'model_id':model_id, 'operation':'predict'}
@@ -189,6 +197,10 @@ class Predict(Resource):
         # put prediction request in the que
         self._q.put(QueueElement(model_id, self._op_type, req['data_id']))
 
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
         log(f'Put model {model_id} in queue for prediction')
 
         return {'model_id':model_id, 'operation':'predict'}
@@ -221,6 +233,10 @@ class Evaluate(Resource):
 
         # Put evaluation request in que
         self._q.put(QueueElement(model_id, self._op_type, doc_id))
+
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
 
         log(f'Put model {model_id} in queue for evaluation')
 
@@ -274,6 +290,10 @@ class Train(Resource):
 
         # Put training request in the que
         self._q.put(QueueElement(model_id, self._op_type))
+
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
 
         log(f'Put model {model_id} in queue for training')
 

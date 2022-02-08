@@ -5,7 +5,7 @@ import json
 from src.utils import log
 
 # read credentials from json on disk
-def read_credentials():
+def read_credentials(): 
     with open('./rabbitmq_creds.json') as json_file:
         creds = json.load(json_file)
 

@@ -7,7 +7,8 @@ from threading import Thread
 import logging
 import json
 import sys
-import os 
+import os
+import dill
 
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate, Continue, List, Train, Predict
 from src.training import training_thread
@@ -39,13 +40,17 @@ def main():
     app = Flask(__name__)
     api = Api(app)
 
-    # init que
     q = Queue()
 
-    # start thread for running model
-    t = Thread(target = training_thread, args=(q, stop, bux, current_model_id,))
-    t.daemon = True
-    t.start()
+    # check if que file exists
+    try:
+        if os.path.isfile('que.obj'):
+            with open('que.obj','rb') as queue_save_file:
+                q = dill.load(queue_save_file)
+    except:
+        log('Loading the que went went wrong. Deleting saved que.', 'ERROR')
+        q = Queue()
+        os.remove('que.obj')
 
     # Add the RestFULL Resources to the api
     api.add_resource(Base, '/distilbert/models/<model_id>', resource_class_kwargs ={'current_model_id': current_model_id})
@@ -58,13 +63,18 @@ def main():
     api.add_resource(List, '/distilbert/models')
     api.add_resource(Train, '/distilbert/train', resource_class_kwargs ={'que' : q})
 
-    # Say Hello to RabbitMQ
-    bux.say_hello()
-
     #start listening
     t2 = Thread(target = bunny_listening_thread, args = (bux,))
     t2.daemon = True
     t2.start()
+
+    # Say Hello to RabbitMQ
+    bux.say_hello()
+
+    # start thread for running model
+    t = Thread(target = training_thread, args=(q, stop, bux, current_model_id,))
+    t.daemon = True
+    t.start()
 
     # Start the APP
     app.run(debug=True, use_reloader=False, port = 4793)
