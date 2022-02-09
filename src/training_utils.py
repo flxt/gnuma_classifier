@@ -7,16 +7,15 @@ from transformers import TrainerCallback
 from sqlitedict import SqliteDict
 import numpy as np
 
-import logging
-
 from src.bunny import BunnyPostalService
-from src.utils import InterruptState
+from src.utils import InterruptState, log
 
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
-    logging.debug(f'Returning training arguments based on kv-store info for model {model_id}')
+    log(f'Returning training arguments based on kv-store info for model '
+        f'{model_id}', 'DEBUG')
 
     return TrainingArguments(
         output_dir = f'./checkpoints/{model_id}',
@@ -38,19 +37,20 @@ def get_training_args(model_id):
 class DataHelper():
 
     def __init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            "distilbert-base-uncased")
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
-        logging.debug('Set up tokenizer and data collector')
+        log('Set up tokenizer and data collector', 'DEBUG')
 
     # get the data and prepare it for 
     # for now it only loads the wnut_17 data set
     def get_data(self, model_id):
-        wnut = load_dataset('wnut_17')
+        wnut = load_dataset('conll2003')
 
         data = wnut.map(self.tokenize_and_align_labels, batched=True)
         num_labels = len(wnut["train"].features[f"ner_tags"].feature.names)
 
-        logging.debug(f'Prepared data for model {model_id}')
+        log(f'Prepared data for model {model_id}', 'DEBUG')
 
         return data, num_labels
 
@@ -58,24 +58,28 @@ class DataHelper():
     # method to tokenize and allign labels
     # taken from the hugging face documentation
     def tokenize_and_align_labels(self, examples):
-        tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
+        tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, 
+            is_split_into_words=True)
 
         labels = []
         for i, label in enumerate(examples[f"ner_tags"]):
-            word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
+            # Map tokens to their respective word.
+            word_ids = tokenized_inputs.word_ids(batch_index=i)  
             previous_word_idx = None
             label_ids = []
-            for word_idx in word_ids:                            # Set the special tokens to -100.
+            for word_idx in word_ids:
+                # Set the special tokens to -100.                          
                 if word_idx is None:
                     label_ids.append(-100)
-                elif word_idx != previous_word_idx:              # Only label the first token of a given word.
+                # Only label the first token of a given word.
+                elif word_idx != previous_word_idx:             
                     label_ids.append(label[word_idx])
 
             labels.append(label_ids)
 
         tokenized_inputs["labels"] = labels
 
-        logging.debug('Tokenizeda and alligned labels')
+        log('Tokenized and alligned labels', 'DEBUG')
         return tokenized_inputs
 
 #callback that check if training is supposed to be interrupted
@@ -107,11 +111,13 @@ class EvaluateCallback(TrainerCallback):
         self._metrics['eval_accuracy'] = metrics['eval_accuracy']
         self._metrics['eval_f1'] = metrics['eval_f1']
 
-        self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
+        self._bux.give_update(self._model_id, self._finished, 
+            state.global_step, state.max_steps, state.epoch, self._metrics)
 
     # first update when the training starts
     def on_train_begin(self, args, state, control, **kwargs):
-        self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
+        self._bux.give_update(self._model_id, self._finished, 
+            state.global_step, state.max_steps, state.epoch, self._metrics)
 
     def on_train_end(self, args, state, control, **kwargs):
         self._finished = True
@@ -119,19 +125,20 @@ class EvaluateCallback(TrainerCallback):
 
 # method computing the metrics
 def compute_metrics(pred):
+    #flatten the arrays
     labels = pred.label_ids.flatten()
-
     preds = pred.predictions.argmax(-1).flatten()
+
+    #remove the padding
+    preds = preds[labels != -100]
+    labels = labels[labels != -100]
+
+    #calculate the accuracy
+    acc = accuracy_score(labels, preds)
     
-    for idx, val in enumerate(labels):
-        if val == -100:
-            preds[idx] = -100
+    # calculate f1 score
+    f1 = f1_score(labels, preds, average = 'macro')
 
-
-    logging.info(preds)
-    logging.info(labels)
-    f1 = f1_score(labels.flatten(), preds.flatten(), average = 'macro')
-    acc = accuracy_score(labels.flatten(), preds.flatten())
     return {
         'accuracy': acc,
         'f1': f1

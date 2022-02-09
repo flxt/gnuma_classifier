@@ -6,35 +6,41 @@ import uuid
 
 from queue import Queue
 import os
-import logging
+import dill
 
 from src.utils import InterruptState, QueueElement, delete_model, check_model
+from src.utils import log
 
 
 # Abort if a json file is expected, but not part of the request
 def abort_not_json():
-    abort(400, message='Only accepting requests with mime type application/json.')
-    logging.error('Only accepting requests with mime type application/json.')
+    abort(400, 
+        message='Only accepting requests with mime type application/json.')
+    log('Only accepting requests with mime type application/json.', 'WARNING')
 
 # Abort if expected parameter is missing from the request.
 def abort_missing_parameter(parameter_name: str):
-    abort(400, message=f'Expected "{parameter_name}" to be part of the request body.')
-    logging.error(f'Expected "{parameter_name}" to be part of the request body.')
+    abort(400, 
+        message=f'Expected "{parameter_name}" to be part of the request body.')
+    log(f'Expected "{parameter_name}" to be part of the request body.', 
+        'WARNING')
 
 # Abort if specified model doesnt exist.
 def abort_wrong_model_id(model_id: str):
     abort(400, message=f'No model with ÍD "{model_id}" exists.')
-    logging.error(f'No model with ÍD "{model_id}" exists.')
+    log(f'No model with ÍD "{model_id}" exists.', 'WARNING')
 
 # Abort if model is corrupted.
 def abort_faulty_model(model_id: str):
     abort(400, message=f'Model "{model_id}" corrupted. Delete the model.')
-    logging.error(f'Model "{model_id}" corrupted. Delete the model.')
+    log(f'Model "{model_id}" corrupted. Delete the model.', 'WARNING')
 
 # Abort wrong model for operation
 def abort_wrong_op_type(model_id: str, op_type: str, status: str):
-    abort(400, message = f'Can not {status} for model {model_id} with status {status}.')
-    logging.error(f'Can not {status} for model {model_id} with status {status}.')
+    abort(400, 
+        message = f'Cant {op_type} for model {model_id} with status {status}.')
+    log(f'Can not {status} for model {model_id} with status {status}.', 
+        'WARNING')
 
 # API enpoint where only a model ID is given
 class Base(Resource):
@@ -65,7 +71,9 @@ class Base(Resource):
             abort_wrong_model_id(model_id)
 
         if self._current_model_id == model_id:
-            abort(400, message = f'Can not delete model {model_id} cause it is currently getting trained.')
+            abort(400, 
+                message = f'Can not delete model {model_id} cause it is'
+                ' currently getting trained.')
 
         delete_model(model_id)
 
@@ -89,13 +97,19 @@ class Continue(Resource):
             abort_faulty_model(model_id)
 
         # Check if model was interruptd
-        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted'):
-            abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] 
+            != 'interrupted'):
+            abort_wrong_op_type(model_id, self._op_type, 
+                SqliteDict('./distilBERT.sqlite')[model_id][status])
 
         # put training request in the que
         self._q.put(QueueElement(model_id, self._op_type))
 
-        logging.info(f'Put model {model_id} in queue to continue training')
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
+        log(f'Put model {model_id} in queue to continue training')
 
         return {'model_id':model_id, 'operation':'continue'}
 
@@ -110,7 +124,7 @@ class Pause(Resource):
     # Interrupt the training and save the model to continue it later
     def patch(self):
         self._stop.set_state(1)
-        logging.info('Interruption signal sent.')
+        log('Interruption signal sent.')
         return {'model_id':model_id, 'operation':'pause'}
 
 
@@ -124,9 +138,44 @@ class Interrupt(Resource):
     # Interrupt the Training and discard the model.
     def delete(self):
         self._stop.set_state(2)
-        logging.info('Interruption and deletion signal sent')
+        log('Interruption and deletion signal sent')
         return {'model_id':model_id, 'operation':'interrupt'}
 
+
+# API endpoint for classifying data wiht a specified model
+class PredictText(Resource):
+
+    # Init the resource
+    def __init__(self, que: Queue):
+        self._q = que
+        self._op_type = 'predict_text'
+
+    # Predict data wiht a specified model
+    def post(self, model_id: str):
+        # check if model exists
+        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+            abort_wrong_model_id(model_id)
+
+        if not check_model(model_id):
+            abort_faulty_model(model_id)
+
+        if not request.is_json:
+            return abort_not_json()
+
+        req = request.json
+
+        if 'sequence' not in req:
+            abort_missing_parameter('sequence')
+
+        # put prediction request in the que
+        self._q.put(QueueElement(model_id, self._op_type, req['sequence']))
+
+        # save que to disk
+        with open('que.obj', 'wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+        log(f'Put model {model_id} in queue for text prediction')
+
+        return {'model_id':model_id, 'operation':'predict'}
 
 # API endpoint for classifying data wiht a specified model
 class Predict(Resource):
@@ -145,10 +194,25 @@ class Predict(Resource):
         if not check_model(model_id):
             abort_faulty_model(model_id)
 
-        # put prediction request in the que
-        self._q.put(QueueElement(model_id, self._op_type))
+        if not request.is_json:
+            return abort_not_json()
 
-        logging.info(f'Put model {model_id} in queue for prediction')
+        req = request.json
+
+        log(req.keys())
+        log('data_id' in req.keys())
+
+        if 'data_id' not in req:
+            abort_missing_parameter('data_id')
+
+        # put prediction request in the que
+        self._q.put(QueueElement(model_id, self._op_type, req['data_id']))
+
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
+        log(f'Put model {model_id} in queue for prediction')
 
         return {'model_id':model_id, 'operation':'predict'}
 
@@ -161,7 +225,7 @@ class Evaluate(Resource):
         self._q = que
         self._op_type = 'evaluate'
 
-    # Evaluate the model with the given data and return some performance information
+    # Evaluate the model with the given data and return some performance info
     def post(self, model_id: str):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
@@ -170,10 +234,22 @@ class Evaluate(Resource):
         if not check_model(model_id):
             abort_faulty_model(model_id)
 
-        # Put evaluation request in que
-        self._q.put(QueueElement(model_id, self._op_type))
+        if not request.is_json:
+            return abort_not_json()
 
-        logging.info(f'Put model {model_id} in queue for evaluation')
+        req = request.json
+
+        if 'doc_id' not in req:
+            abort_missing_parameter('doc_id')
+
+        # Put evaluation request in que
+        self._q.put(QueueElement(model_id, self._op_type, req['doc_id']))
+
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
+        log(f'Put model {model_id} in queue for evaluation')
 
         return {'model_id':model_id, 'operation':'evaluate'}
 
@@ -186,7 +262,10 @@ class List(Resource):
 
         with SqliteDict('./distilBERT.sqlite') as db:
             for model_id in db.keys():
-                model_list.append({'model_id': model_id, 'model_name': db[model_id]['model_name'], 'data': db[model_id]['data_location'], 'status': db[model_id]['status']})
+                model_list.append({'model_id': model_id, 
+                    'model_name': db[model_id]['model_name'], 
+                    'data': db[model_id]['data_location'], 
+                    'status': db[model_id]['status']})
 
         return model_list
 
@@ -226,6 +305,10 @@ class Train(Resource):
         # Put training request in the que
         self._q.put(QueueElement(model_id, self._op_type))
 
-        logging.info(f'Put model {model_id} in queue for training')
+        # save que to disk
+        with open('que.obj','wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
+        log(f'Put model {model_id} in queue for training')
 
         return {'model_id':model_id, 'operation':'train'}

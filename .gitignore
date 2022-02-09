@@ -1,4 +1,15 @@
-*.sqlite
-src/__pycache__/*
-models/*
-checkpoints/*
+# Key Value store
+distilBERT.sqlite
+
+# py cache
+src/__pycache__/
+
+# Models and Checkpoints
+models/
+checkpoints/
+
+# RabbitMQ credentials
+rabbitmq_creds.json
+
+# the save que object
+que.obj
