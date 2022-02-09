@@ -86,34 +86,33 @@ class BunnyPostalService():
 
 # Listening to rabbit to check if supposed to say hello
 def bunny_listening_thread(bux: BunnyPostalService):
-    while True:
-        creds = read_credentials()
+    creds = read_credentials()
 
-        # conntect to bunny
-        credentials = pika.PlainCredentials(creds['rabbit_mq_user'], 
-            creds['rabbit_mq_pass'])
-        connection_params = pika.ConnectionParameters(host=creds['rabbit_mq_host'], 
-            port=creds['rabbit_mq_port'], credentials = credentials)
-        connection = pika.BlockingConnection(connection_params)
-        channel = connection.channel()
-        exchange = creds['rabbit_mq_exchange']
-        routing_key = creds['rabbit_mq_routing_key']
-        channel.queue_declare(queue = creds['rabbit_mq_queue'])
-        channel.queue_bind(creds['rabbit_mq_queue'], exchange)
+    # conntect to bunny
+    credentials = pika.PlainCredentials(creds['rabbit_mq_user'], 
+        creds['rabbit_mq_pass'])
+    connection_params = pika.ConnectionParameters(host=creds['rabbit_mq_host'], 
+        port=creds['rabbit_mq_port'], credentials = credentials)
+    connection = pika.BlockingConnection(connection_params)
+    channel = connection.channel()
+    exchange = creds['rabbit_mq_exchange']
+    routing_key = creds['rabbit_mq_routing_key']
+    channel.queue_declare(queue = creds['rabbit_mq_queue'])
+    channel.queue_bind(creds['rabbit_mq_queue'], exchange)
 
-        def bunny_callback(ch, method, properties, body):
-            #check if supposed to send hello message
-            if properties.headers['event'] == 'ExperimentStart':
-                bux.say_hello()
+    def bunny_callback(ch, method, properties, body):
+        #check if supposed to send hello message
+        if properties.headers['event'] == 'ExperimentStart':
+            bux.say_hello()
 
-        channel.basic_consume(queue=creds['rabbit_mq_queue'], 
-            on_message_callback=bunny_callback, auto_ack=False)
+    channel.basic_consume(queue=creds['rabbit_mq_queue'], 
+        on_message_callback=bunny_callback, auto_ack=False)
 
-        # catch keyboard interrupts
-        try:
-            channel.start_consuming()
-        except (KeyboardInterrupt, SystemExit):
-            print('Shutting down bunny listening thread.')
+    # catch keyboard interrupts
+    try:
+        channel.start_consuming()
+    except (KeyboardInterrupt, SystemExit):
+        print('Shutting down bunny listening thread.')
 
 
 # send status update that still alive in intervals

@@ -125,7 +125,7 @@ class Pause(Resource):
     def patch(self):
         self._stop.set_state(1)
         log('Interruption signal sent.')
-        return {'model_id':model_id, 'operation':'pause'}
+        return
 
 
 # API endpoint for interrupting the training
