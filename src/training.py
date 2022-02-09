@@ -65,7 +65,7 @@ def training_thread(q: Queue, stop: InterruptState,
                     log(f'Wrong operation type {op_type} for model {model_id}', 
                         'ERROR')
             except Exception as e:
-                logging.error(f'Excpetion occured during training: {e}')
+                log(f'Excpetion occured during training: {e}', 'ERROR')
                 
                 bux.deliver_error_message(f'Error during traing.\n'
                     f'Exception: {e}\nTraining canceled and model'

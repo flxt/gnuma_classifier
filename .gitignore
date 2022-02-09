@@ -5,8 +5,8 @@ distilBERT.sqlite
 src/__pycache__/
 
 # Models and Checkpoints
-models/
-checkpoints/
+models/*
+checkpoints/*
 
 # RabbitMQ credentials
 rabbitmq_creds.json

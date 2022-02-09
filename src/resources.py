@@ -139,7 +139,7 @@ class Interrupt(Resource):
     def delete(self):
         self._stop.set_state(2)
         log('Interruption and deletion signal sent')
-        return {'model_id':model_id, 'operation':'interrupt'}
+        return
 
 
 # API endpoint for classifying data wiht a specified model
