@@ -25,6 +25,15 @@ def main():
     for model_id in keys:
         check_model(model_id)
 
+        # delete model with status training unless checkpoints where saved.
+        # In that case change its status to interrupted, so training
+        # can be continued.
+        if SqliteDict('./distilBERT.sqlite')['status'] == 'training':
+            if os.path.isdir(f'./checkpoints/{model_id}'):
+                SqliteDict('./distilBERT.sqlite')['status'] = 'interrupted'
+            else:
+                delete_model(model_id)
+
     # set logging lvl
     logging.basicConfig()
     logging.getLogger().setLevel(logging.INFO)
