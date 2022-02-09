@@ -1,5 +1,6 @@
 from transformers import Trainer, AutoModelForTokenClassification, AutoTokenizer
 import torch
+import numpy as np
 
 from sqlitedict import SqliteDict
 
@@ -40,21 +41,28 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, cur
 
             log(f'Got model {model_id} with operation type {op_type} from the queue')
 
-            if (op_type == 'train'):
-                train_new_model(model_id, stop, bux)
-            elif (op_type == 'continue'):
-                continue_training_model(model_id, stop, bux)
-            elif (op_type == 'evaluate'):
-                data_id = ele.get_text()
-                evaluate_model(model_id, stop, bux, data_id)
-            elif (op_type == 'predict_text'):
-                text = ele.get_text() 
-                predict_text(model_id, stop, bux, text)
-            elif (op_type == 'predict'):
-                doc_id =  ele.get_text()
-                predict_data(model_id, stop, bux, doc_id)
-            else:
-                log(f'Wrong operation type {op_type} for model {model_id}', 'ERROR')
+            try:
+                if (op_type == 'train'):
+                    train_new_model(model_id, stop, bux)
+                elif (op_type == 'continue'):
+                    continue_training_model(model_id, stop, bux)
+                elif (op_type == 'evaluate'):
+                    data_id = ele.get_text()
+                    evaluate_model(model_id, stop, bux, data_id)
+                elif (op_type == 'predict_text'):
+                    text = ele.get_text() 
+                    predict_text(model_id, stop, bux, text)
+                elif (op_type == 'predict'):
+                    doc_id =  ele.get_text()
+                    predict_data(model_id, stop, bux, doc_id)
+                else:
+                    log(f'Wrong operation type {op_type} for model {model_id}', 'ERROR')
+            except Exception as e:
+                logging.error(f'Excpetion occured during training: {e}')
+                # bux error message
+
+                # delte model
+                delete_model(model_id)
 
             current_model_id = None
 
@@ -111,6 +119,8 @@ def train_new_model(model_id: str, stop: InterruptState, bux: BunnyPostalService
     # Start training the model if no interruption
     log(f'Starting the training for model {model_id}')
     trainer.train()
+
+    log(model.config.id2label)
 
     # Training done
     # Case: Training finished normally
@@ -310,13 +320,8 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, s
 
     log(f'Text prediction for model {model_id} done.')
 
-    # convert labeled data to a list of tuples
-    out_list = []
-    for token, prediction in zip(tokens, predictions[0].numpy()):
-        out_list.append((token, model.config.id2label[prediction]))
-
     # bux send results to rabbit mq
-    bux.deliver_text_prediction(model_id, out_list)
+    bux.deliver_prediction(model_id, tokens, predictions)
 
 
 # Call this method to predict text with a model
@@ -334,8 +339,34 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, d
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
     model.eval()
 
+    # Get the training Arguments
+    training_args = get_training_args(model_id)
+
     # todo
     dh = DataHelper()
     data, num_labels = dh.get_data(model_id)
 
-    log(data['test'])
+    # Define the trainer
+    trainer = Trainer(
+        model = model,
+        args = training_args,
+        data_collator = dh.data_collator,
+        tokenizer = dh.tokenizer,
+        compute_metrics = compute_metrics
+        )
+
+    # the data tokens
+    token_data = data['test']['tokens']
+
+    # get predictions from trainer
+    results = trainer.predict(data['test'])
+    preds = np.argmax(results[0], 2)
+
+    # remove the padding. saddly iteratively
+    pred_data = []
+    for i, val in enumerate(token_data):
+        pred_data.append(list(map(int, preds[i][1:len(val) + 1])))
+
+    bux.deliver_prediction(model_id, token_data, pred_data)
+
+    log(model.config.id2label)

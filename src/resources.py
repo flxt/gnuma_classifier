@@ -157,7 +157,6 @@ class PredictText(Resource):
         if 'sequence' not in req:
             abort_missing_parameter('sequence')
 
-
         # put prediction request in the que
         self._q.put(QueueElement(model_id, self._op_type, req['sequence']))
 
@@ -190,9 +189,11 @@ class Predict(Resource):
 
         req = request.json
 
+        log(req.keys())
+        log('data_id' in req.keys())
+
         if 'data_id' not in req:
             abort_missing_parameter('data_id')
-
 
         # put prediction request in the que
         self._q.put(QueueElement(model_id, self._op_type, req['data_id']))
@@ -232,7 +233,7 @@ class Evaluate(Resource):
             abort_missing_parameter('doc_id')
 
         # Put evaluation request in que
-        self._q.put(QueueElement(model_id, self._op_type, doc_id))
+        self._q.put(QueueElement(model_id, self._op_type, req['doc_id']))
 
         # save que to disk
         with open('que.obj','wb') as queue_save_file:

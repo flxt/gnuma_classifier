@@ -4,6 +4,9 @@ from pika.exchange_type import ExchangeType
 import json
 from src.utils import log
 
+import time
+
+
 # read credentials from json on disk
 def read_credentials(): 
     with open('./rabbitmq_creds.json') as json_file:
@@ -59,13 +62,10 @@ class BunnyPostalService():
 
         self.send_message(message)
 
-    def deliver_text_prediction(self, model_id, result_list):
+    def deliver_prediction(self, model_id, tokens, labels):
         prediction_list = []
 
-        for token, label in result_list:
-            prediction_list.append({'token': token, 'label': label})
-
-        message = {'classifier_id': 'distilbert', 'model_id': model_id, 'predictions': prediction_list}
+        message = {'classifier_id': 'distilbert', 'model_id': model_id, 'tokens': tokens, 'labels': labels}
 
         self.send_message(message)
 
@@ -96,3 +96,11 @@ def bunny_listening_thread(bux: BunnyPostalService):
     except (KeyboardInterrupt, SystemExit):
         print('Shutting down bunny listening thread.')
 
+
+# send status update that still alive in intervals
+def bunny_alive_thread(bux: BunnyPostalService):
+    # cute bunny sleeps for 10 seconds
+    time.sleep(10)
+
+    # wakes up to say hello
+    bux.send_message('OwO')

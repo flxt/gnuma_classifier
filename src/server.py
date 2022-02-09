@@ -13,7 +13,7 @@ import dill
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate, Continue, List, Train, Predict
 from src.training import training_thread
 from src.utils import InterruptState, check_model, delete_model
-from src.bunny import BunnyPostalService, bunny_listening_thread
+from src.bunny import BunnyPostalService, bunny_listening_thread, bunny_alive_thread
 
 def main():
     print("Starting server. Press ctrl + C to quit.")
@@ -70,6 +70,11 @@ def main():
 
     # Say Hello to RabbitMQ
     bux.say_hello()
+
+    # i am alive
+    t3 = Thread(target = bunny_alive_thread, args = (bux,))
+    t3.daemon = True
+    t3.start()
 
     # start thread for running model
     t = Thread(target = training_thread, args=(q, stop, bux, current_model_id,))
