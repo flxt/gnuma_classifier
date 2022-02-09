@@ -1,9 +1,0 @@
-{
-	"rabbit_mq_host" : "h2826957.stratoserver.net",
-    "rabbit_mq_port" : 5672,
-    "rabbit_mq_user" : "rabbitmqtest",
-    "rabbit_mq_pass" : "rabbitmqtest",
-    "rabbit_mq_exchange" : "test",
-    "rabbit_mq_routing_key" : "Classifier.Distilbert",
-    "rabbit_mq_queue" : "test_q"
-}
