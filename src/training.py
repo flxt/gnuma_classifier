@@ -59,7 +59,8 @@ def training_thread(q: Queue, stop: InterruptState, bux: BunnyPostalService, cur
                     log(f'Wrong operation type {op_type} for model {model_id}', 'ERROR')
             except Exception as e:
                 logging.error(f'Excpetion occured during training: {e}')
-                # bux error message
+                
+                bux.deliver_error_message(f'Error during traing.\nException: {e}\nTraining canceled and model {model_id} deleted.')
 
                 # delte model
                 delete_model(model_id)

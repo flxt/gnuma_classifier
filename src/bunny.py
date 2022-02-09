@@ -30,16 +30,16 @@ class BunnyPostalService():
         self._channel.exchange_declare(exchange = self._exchange, exchange_type='fanout')
 
     # The BunnyPostalServices delivers your message to the distilbert exchange.
-    def send_message(self, message):
-        log(f'Send to exchange: {message}')
-        self._channel.basic_publish(exchange = self._exchange, routing_key = self._routing_key, body = json.dumps(message))
+    def send_message(self, message, event):
+        log(f'Send {event} message to exchange: {message}')
+        self._channel.basic_publish(exchange = self._exchange, routing_key = self._routing_key, body = json.dumps(message), properties = pika.BasicProperties(headers={'event': event}))
 
     # The BunnyPostalService introduces the Microservice to the exchange
     def say_hello(self):
         with open('./distilbert_startup.json') as json_file:
             startup = json.load(json_file)
 
-        self.send_message(startup)
+        self.send_message(startup, 'ClassifierStart')
 
     # The BunnyPostalService gives an update about training
     def give_update(self, model_id, finished, current_step, total_steps, epoch, metrics):
@@ -50,7 +50,7 @@ class BunnyPostalService():
 
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 'finished': finished, 'current_step': current_step, 'total_steps': total_steps, 'epoch': epoch, 'metrics': metric_list}
 
-        self.send_message(message)
+        self.send_message(message, 'TrainingUpdate')
 
     def deliver_eval_results(self, model_id, metrics):
         metric_list = []
@@ -60,14 +60,17 @@ class BunnyPostalService():
 
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 'metrics': metric_list}
 
-        self.send_message(message)
+        self.send_message(message, 'EvaluationFinished')
 
     def deliver_prediction(self, model_id, tokens, labels):
         prediction_list = []
 
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 'tokens': tokens, 'labels': labels}
 
-        self.send_message(message)
+        self.send_message(message, 'PredictionFinished')
+
+    def deliver_error_message(self, message):
+        self.send_message(message, 'ClassifierError')
 
 
 # Listening to rabbit to check if supposed to say hello
@@ -103,4 +106,4 @@ def bunny_alive_thread(bux: BunnyPostalService):
     time.sleep(10)
 
     # wakes up to say hello
-    bux.send_message('OwO')
+    bux.send_message('OwO', 'ClassifierAlive')
