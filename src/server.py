@@ -10,10 +10,12 @@ import sys
 import os
 import dill
 
-from src.resources import Base, Interrupt, Pause, PredictText, Evaluate, Continue, List, Train, Predict
+from src.resources import Base, Interrupt, Pause, PredictText, Evaluate 
+from src.resources import Continue, List, Train, Predict
 from src.training import training_thread
 from src.utils import InterruptState, check_model, delete_model
-from src.bunny import BunnyPostalService, bunny_listening_thread, bunny_alive_thread
+from src.bunny import BunnyPostalService, bunny_listening_thread
+from src.bunny import bunny_alive_thread
 
 def main():
     print("Starting server. Press ctrl + C to quit.")
@@ -53,15 +55,23 @@ def main():
         os.remove('que.obj')
 
     # Add the RestFULL Resources to the api
-    api.add_resource(Base, '/distilbert/models/<model_id>', resource_class_kwargs ={'current_model_id': current_model_id})
-    api.add_resource(Interrupt, '/distilbert/interrupt', resource_class_kwargs ={'stop' : stop})
-    api.add_resource(Pause, '/distilbert/pause', resource_class_kwargs ={'stop' : stop})
-    api.add_resource(PredictText, '/distilbert/predict/text/<model_id>', resource_class_kwargs ={'que' : q})
-    api.add_resource(Predict, '/distilbert/predict/data/<model_id>', resource_class_kwargs ={'que' : q})
-    api.add_resource(Evaluate, '/distilbert/evaluate/<model_id>', resource_class_kwargs ={'que' : q})
-    api.add_resource(Continue, '/distilbert/continue/<model_id>', resource_class_kwargs ={'que' : q})
+    api.add_resource(Base, '/distilbert/models/<model_id>', 
+        resource_class_kwargs ={'current_model_id': current_model_id})
+    api.add_resource(Interrupt, '/distilbert/interrupt', 
+        resource_class_kwargs ={'stop' : stop})
+    api.add_resource(Pause, '/distilbert/pause', 
+        resource_class_kwargs ={'stop' : stop})
+    api.add_resource(PredictText, '/distilbert/predict/text/<model_id>', 
+        resource_class_kwargs ={'que' : q})
+    api.add_resource(Predict, '/distilbert/predict/data/<model_id>', 
+        resource_class_kwargs ={'que' : q})
+    api.add_resource(Evaluate, '/distilbert/evaluate/<model_id>', 
+        resource_class_kwargs ={'que' : q})
+    api.add_resource(Continue, '/distilbert/continue/<model_id>', 
+        resource_class_kwargs ={'que' : q})
     api.add_resource(List, '/distilbert/models')
-    api.add_resource(Train, '/distilbert/train', resource_class_kwargs ={'que' : q})
+    api.add_resource(Train, '/distilbert/train', 
+        resource_class_kwargs ={'que' : q})
 
     #start listening
     t2 = Thread(target = bunny_listening_thread, args = (bux,))
@@ -77,7 +87,8 @@ def main():
     t3.start()
 
     # start thread for running model
-    t = Thread(target = training_thread, args=(q, stop, bux, current_model_id,))
+    t = Thread(target = training_thread, 
+        args=(q, stop, bux, current_model_id,))
     t.daemon = True
     t.start()
 

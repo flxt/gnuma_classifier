@@ -14,7 +14,8 @@ from src.utils import InterruptState, log
 def get_training_args(model_id):
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
-    log(f'Returning training arguments based on kv-store info for model {model_id}', 'DEBUG')
+    log(f'Returning training arguments based on kv-store info for model '
+        f'{model_id}', 'DEBUG')
 
     return TrainingArguments(
         output_dir = f'./checkpoints/{model_id}',
@@ -36,7 +37,8 @@ def get_training_args(model_id):
 class DataHelper():
 
     def __init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            "distilbert-base-uncased")
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
         log('Set up tokenizer and data collector', 'DEBUG')
 
@@ -56,17 +58,21 @@ class DataHelper():
     # method to tokenize and allign labels
     # taken from the hugging face documentation
     def tokenize_and_align_labels(self, examples):
-        tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
+        tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, 
+            is_split_into_words=True)
 
         labels = []
         for i, label in enumerate(examples[f"ner_tags"]):
-            word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
+            # Map tokens to their respective word.
+            word_ids = tokenized_inputs.word_ids(batch_index=i)  
             previous_word_idx = None
             label_ids = []
-            for word_idx in word_ids:                            # Set the special tokens to -100.
+            for word_idx in word_ids:
+                # Set the special tokens to -100.                          
                 if word_idx is None:
                     label_ids.append(-100)
-                elif word_idx != previous_word_idx:              # Only label the first token of a given word.
+                # Only label the first token of a given word.
+                elif word_idx != previous_word_idx:             
                     label_ids.append(label[word_idx])
 
             labels.append(label_ids)
@@ -105,11 +111,13 @@ class EvaluateCallback(TrainerCallback):
         self._metrics['eval_accuracy'] = metrics['eval_accuracy']
         self._metrics['eval_f1'] = metrics['eval_f1']
 
-        self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
+        self._bux.give_update(self._model_id, self._finished, 
+            state.global_step, state.max_steps, state.epoch, self._metrics)
 
     # first update when the training starts
     def on_train_begin(self, args, state, control, **kwargs):
-        self._bux.give_update(self._model_id, self._finished, state.global_step, state.max_steps, state.epoch, self._metrics)
+        self._bux.give_update(self._model_id, self._finished, 
+            state.global_step, state.max_steps, state.epoch, self._metrics)
 
     def on_train_end(self, args, state, control, **kwargs):
         self._finished = True

@@ -8,18 +8,22 @@ from queue import Queue
 import os
 import dill
 
-from src.utils import InterruptState, QueueElement, delete_model, check_model, log
+from src.utils import InterruptState, QueueElement, delete_model, check_model
+from src.utils import log
 
 
 # Abort if a json file is expected, but not part of the request
 def abort_not_json():
-    abort(400, message='Only accepting requests with mime type application/json.')
+    abort(400, 
+        message='Only accepting requests with mime type application/json.')
     log('Only accepting requests with mime type application/json.', 'WARNING')
 
 # Abort if expected parameter is missing from the request.
 def abort_missing_parameter(parameter_name: str):
-    abort(400, message=f'Expected "{parameter_name}" to be part of the request body.')
-    log(f'Expected "{parameter_name}" to be part of the request body.', 'WARNING')
+    abort(400, 
+        message=f'Expected "{parameter_name}" to be part of the request body.')
+    log(f'Expected "{parameter_name}" to be part of the request body.', 
+        'WARNING')
 
 # Abort if specified model doesnt exist.
 def abort_wrong_model_id(model_id: str):
@@ -33,8 +37,10 @@ def abort_faulty_model(model_id: str):
 
 # Abort wrong model for operation
 def abort_wrong_op_type(model_id: str, op_type: str, status: str):
-    abort(400, message = f'Can not {status} for model {model_id} with status {status}.')
-    log(f'Can not {status} for model {model_id} with status {status}.', 'WARNING')
+    abort(400, 
+        message = f'Cant {op_type} for model {model_id} with status {status}.')
+    log(f'Can not {status} for model {model_id} with status {status}.', 
+        'WARNING')
 
 # API enpoint where only a model ID is given
 class Base(Resource):
@@ -65,7 +71,9 @@ class Base(Resource):
             abort_wrong_model_id(model_id)
 
         if self._current_model_id == model_id:
-            abort(400, message = f'Can not delete model {model_id} cause it is currently getting trained.')
+            abort(400, 
+                message = f'Can not delete model {model_id} cause it is'
+                ' currently getting trained.')
 
         delete_model(model_id)
 
@@ -89,8 +97,10 @@ class Continue(Resource):
             abort_faulty_model(model_id)
 
         # Check if model was interruptd
-        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'interrupted'):
-            abort_wrong_op_type(model_id, self._op_type, SqliteDict('./distilBERT.sqlite')[model_id][status])
+        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] 
+            != 'interrupted'):
+            abort_wrong_op_type(model_id, self._op_type, 
+                SqliteDict('./distilBERT.sqlite')[model_id][status])
 
         # put training request in the que
         self._q.put(QueueElement(model_id, self._op_type))
@@ -215,7 +225,7 @@ class Evaluate(Resource):
         self._q = que
         self._op_type = 'evaluate'
 
-    # Evaluate the model with the given data and return some performance information
+    # Evaluate the model with the given data and return some performance info
     def post(self, model_id: str):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
@@ -252,7 +262,10 @@ class List(Resource):
 
         with SqliteDict('./distilBERT.sqlite') as db:
             for model_id in db.keys():
-                model_list.append({'model_id': model_id, 'model_name': db[model_id]['model_name'], 'data': db[model_id]['data_location'], 'status': db[model_id]['status']})
+                model_list.append({'model_id': model_id, 
+                    'model_name': db[model_id]['model_name'], 
+                    'data': db[model_id]['data_location'], 
+                    'status': db[model_id]['status']})
 
         return model_list
 

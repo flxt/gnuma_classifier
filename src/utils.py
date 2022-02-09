@@ -5,7 +5,8 @@ import shutil
 import logging
 
 # Que element class
-# Saves the model element and the type of operation that the trainer is supposed to do with it
+# Saves the model element and the type of operation that the trainer 
+# is supposed to do with it
 # Possible types:
 # train = Train new model
 # continue = Continue training a model
@@ -40,7 +41,7 @@ class InterruptState():
         self._stop = x
 
 
-# Methods that removes checkpoints for model with model_id if checkpoints exist.
+# Methods that removes checkpoints for model if checkpoints exist.
 def remove_checkpoints(model_id):
     if os.path.isdir(f'./checkpoints/{model_id}'):
         shutil.rmtree('./checkpoints/' + model_id)
