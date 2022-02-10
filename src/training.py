@@ -47,32 +47,28 @@ def training_thread(q: Queue, stop: InterruptState,
             log(f'Got model {model_id} with operation type'
                 f'{op_type} from the queue')
 
-            try:
-                if (op_type == 'train'):
-                    train_new_model(model_id, stop, bux)
-                elif (op_type == 'continue'):
-                    continue_training_model(model_id, stop, bux)
-                elif (op_type == 'evaluate'):
-                    data_id = ele.get_text()
-                    evaluate_model(model_id, stop, bux, data_id)
-                elif (op_type == 'predict_text'):
-                    text = ele.get_text() 
-                    predict_text(model_id, stop, bux, text)
-                elif (op_type == 'predict'):
-                    doc_id =  ele.get_text()
-                    predict_data(model_id, stop, bux, doc_id)
-                else:
-                    log(f'Wrong operation type {op_type} for model {model_id}', 
-                        'ERROR')
-            except Exception as e:
-                log(f'Excpetion occured during training: {e}', 'ERROR')
-                
-                bux.deliver_error_message(f'Error during traing.\n'
-                    f'Exception: {e}\nTraining canceled and model'
-                    f' {model_id} deleted.')
-
-                # delte model
-                delete_model(model_id)
+            #try:
+            if (op_type == 'train'):
+                train_new_model(model_id, stop, bux)
+            elif (op_type == 'continue'):
+                continue_training_model(model_id, stop, bux)
+            elif (op_type == 'evaluate'):
+                data_id = ele.get_text()
+                evaluate_model(model_id, stop, bux, data_id)
+            elif (op_type == 'predict_text'):
+                text = ele.get_text() 
+                predict_text(model_id, stop, bux, text)
+            elif (op_type == 'predict'):
+                doc_id =  ele.get_text()
+                predict_data(model_id, stop, bux, doc_id)
+            else:
+                log(f'Wrong operation type {op_type} for model {model_id}', 
+                    'ERROR')
+            #except Exception as e:
+            #    log(f'Excpetion occured during training: {e}', 'ERROR')
+             #   
+             #   bux.deliver_error_message(f'Error during traing.\n'
+              #      f'Exception: {e}')
 
             current_model_id = None
 
@@ -103,7 +99,12 @@ def train_new_model(model_id: str, stop: InterruptState,
 
     # Get the data
     dh = DataHelper()
-    data, num_labels = dh.get_data(model_id)
+    train_data = dh.get_data(model_info['train_ids'])
+    val_data = dh.get_data(model_info['val_ids'])
+
+    num_labels = np.unique(train_data['ner_tags']).size
+    log(num_labels)
+    num_labels = 9
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
@@ -113,8 +114,8 @@ def train_new_model(model_id: str, stop: InterruptState,
     trainer = Trainer(
             model = model,
             args = training_args,
-            train_dataset = data['train'],
-            eval_dataset = data['test'],
+            train_dataset = train_data,
+            eval_dataset = val_data,
             data_collator = dh.data_collator,
             tokenizer = dh.tokenizer,
             callbacks = [InterruptCallback(stop), 
@@ -183,27 +184,30 @@ def continue_training_model(model_id: str, stop: InterruptState,
     # Sort the list in a way that the last checkpoint is in the first spot.
     cp_list.sort(reverse = True)
 
+    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
     #check for correct status
-    if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 
-        'interrupted' or not check_model(model_id)):
+    if (model_info['status'] != 'interrupted' or not check_model(model_id)):
         log(f'model {model_id} cant be continued', 'ERROR')
-        # todo: some error message
+        bux.deliver_error_message(f'Model {model_id} with status'
+            f'{status}cant be continued.')
         return
 
     # Get the data
     dh = DataHelper()
-    data, num_labels = dh.get_data(model_id)
+    train_data = dh.get_data(model_info['train_ids'])
+    val_data = dh.get_data(model_info['val_ids'])
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", num_labels = num_labels)
+        "distilbert-base-uncased", num_labels = model_info['num_labels'])
 
     # Define the trainer
     trainer = Trainer(
             model = model,
             args = training_args,
-            train_dataset = data['train'],
-            eval_dataset = data['test'],
+            train_dataset = train_data,
+            eval_dataset = val_data,
             data_collator = dh.data_collator,
             tokenizer = dh.tokenizer,
             callbacks = [InterruptCallback(stop), 
@@ -213,7 +217,6 @@ def continue_training_model(model_id: str, stop: InterruptState,
 
     # Update the model info that the model is training
     with SqliteDict('./distilBERT.sqlite') as db:
-        model_info = db[model_id]
         model_info['status'] = 'training'
         model_info['num_labels'] = num_labels
         db[model_id] = model_info
@@ -267,11 +270,14 @@ def continue_training_model(model_id: str, stop: InterruptState,
 # Call this method evaluate a model
 def evaluate_model(model_id: str, stop: InterruptState, 
     bux: BunnyPostalService, data_id: str):
+    
+    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
     #check for correct status
-    if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' 
-        or not check_model(model_id)):
+    if (model_info['status'] != 'trained' or not check_model(model_id)):
         log(f'model {model_id} cant be evaluated', 'ERROR')
-        # todo: some error message
+        bux.deliver_error_message(f'Model {model_id} with status'
+            f'{status}cant be evaluated.')
         return
 
     # Get the training Arguments
@@ -279,11 +285,11 @@ def evaluate_model(model_id: str, stop: InterruptState,
 
     # Get the evaluation data
     dh = DataHelper()
-    data, num_labels = dh.get_data(model_id)
+    data = dh.get_data(data_id)
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", num_labels = num_labels)
+        "distilbert-base-uncased", num_labels = model_info['num_labels'])
 
     # Load trained weights
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
@@ -300,7 +306,7 @@ def evaluate_model(model_id: str, stop: InterruptState,
 
     # Run the Evaluation
     log(f'Beginning evaluation for model {model_id}')
-    out = trainer.evaluate(eval_dataset = data['train'])
+    out = trainer.evaluate(eval_dataset = data)
 
     metrics = {}
     metrics['eval_loss'] = out['eval_loss']
@@ -316,17 +322,20 @@ def evaluate_model(model_id: str, stop: InterruptState,
 # Call this method to predict text with a model
 def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, 
     sequence: str):
+    
+    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
     #check for correct status
-    if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' 
-        or not check_model(model_id)):
+    if (model_info['status'] != 'trained' or not check_model(model_id)):
         log(f'model {model_id} cant be predicted', 'ERROR')
-        # todo: some error message
+        bux.deliver_error_message(f'Model {model_id} with status'
+            f'{status}cant be predicted.')
         return
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
         "distilbert-base-uncased", 
-        num_labels = SqliteDict('./distilBERT.sqlite')[model_id]['num_labels'])
+        num_labels = model_info['num_labels'])
 
     # Load trained weights
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
@@ -339,6 +348,7 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     inputs = tokenizer(sequence, return_tensors="pt")
     tokens = inputs.tokens()
 
+
     log(inputs, 'DEBUG')
 
     # get model output
@@ -346,6 +356,11 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     # get actual predictions
     predictions = torch.argmax(outputs, dim=2)
+
+    #convert to list
+    predictions = predictions.tolist()[0]
+
+    log(predictions)
 
     log(f'Text prediction for model {model_id} done.')
 
@@ -355,18 +370,21 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
 # Call this method to predict text with a model
 def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, 
-    doc_id: str):
+    doc_ids: str):
+    
+    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+
     #check for correct status
-    if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] != 'trained' 
-        or not check_model(model_id)):
-        logging.error(f'model {model_id} cant be predicted')
-        # todo: some error message
+    if (model_info['status'] != 'trained' or not check_model(model_id)):
+        log(f'model {model_id} cant be predicted', 'ERROR')
+        bux.deliver_error_message(f'Model {model_id} with status'
+            f'{status}cant be predicted.')
         return
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
         "distilbert-base-uncased", 
-        num_labels = SqliteDict('./distilBERT.sqlite')[model_id]['num_labels'])
+        num_labels = model_info['num_labels'])
 
     # Load trained weights
     model.load_state_dict(torch.load(f'models/{model_id}.pth'))
@@ -377,7 +395,7 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     # todo
     dh = DataHelper()
-    data, num_labels = dh.get_data(model_id)
+    data = dh.get_data(doc_ids)
 
     # Define the trainer
     trainer = Trainer(
@@ -389,10 +407,10 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
         )
 
     # the data tokens
-    token_data = data['test']['tokens']
+    token_data = data['tokens']
 
     # get predictions from trainer
-    results = trainer.predict(data['test'])
+    results = trainer.predict(data)
     preds = np.argmax(results[0], 2)
 
     # remove the padding. saddly iteratively
@@ -402,4 +420,4 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     bux.deliver_prediction(model_id, token_data, pred_data)
 
-    log(model.config.id2label)
+    log(f'Prediction finished for model {model_id}')

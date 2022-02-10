@@ -13,12 +13,16 @@ import dill
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate 
 from src.resources import Continue, List, Train, Predict
 from src.training import training_thread
-from src.utils import InterruptState, check_model, delete_model
+from src.utils import InterruptState, check_model, delete_model, log
 from src.bunny import BunnyPostalService, bunny_listening_thread
 from src.bunny import bunny_alive_thread
 
 def main():
     print("Starting server. Press ctrl + C to quit.")
+
+    # set logging lvl
+    logging.basicConfig()
+    logging.getLogger().setLevel(logging.INFO)
 
     # Delete all models that are in a faulty state
     keys = SqliteDict('./distilBERT.sqlite').keys()
@@ -28,15 +32,17 @@ def main():
         # delete model with status training unless checkpoints where saved.
         # In that case change its status to interrupted, so training
         # can be continued.
-        if SqliteDict('./distilBERT.sqlite')['status'] == 'training':
+        if SqliteDict('./distilBERT.sqlite')[model_id]['status'] == 'training':
             if os.path.isdir(f'./checkpoints/{model_id}'):
-                SqliteDict('./distilBERT.sqlite')['status'] = 'interrupted'
+                #log(SqliteDict('./distilBERT.sqlite')[model_id]['status'])
+                with SqliteDict('./distilBERT.sqlite') as db:
+                    model_info = db[model_id]
+                    model_info['status'] = 'interrupted'
+                    db[model_id] = model_info
+                    db.commit()
+                #log(SqliteDict('./distilBERT.sqlite')[model_id]['status'])
             else:
                 delete_model(model_id)
-
-    # set logging lvl
-    logging.basicConfig()
-    logging.getLogger().setLevel(logging.INFO)
 
     # set interrupt vairable
     stop = InterruptState()

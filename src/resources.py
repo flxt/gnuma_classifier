@@ -202,11 +202,11 @@ class Predict(Resource):
         log(req.keys())
         log('data_id' in req.keys())
 
-        if 'data_id' not in req:
-            abort_missing_parameter('data_id')
+        if 'doc_ids' not in req:
+            abort_missing_parameter('doc_ids')
 
         # put prediction request in the que
-        self._q.put(QueueElement(model_id, self._op_type, req['data_id']))
+        self._q.put(QueueElement(model_id, self._op_type, req['doc_ids']))
 
         # save que to disk
         with open('que.obj','wb') as queue_save_file:
@@ -239,11 +239,11 @@ class Evaluate(Resource):
 
         req = request.json
 
-        if 'doc_id' not in req:
-            abort_missing_parameter('doc_id')
+        if 'doc_ids' not in req:
+            abort_missing_parameter('doc_ids')
 
         # Put evaluation request in que
-        self._q.put(QueueElement(model_id, self._op_type, req['doc_id']))
+        self._q.put(QueueElement(model_id, self._op_type, req['doc_ids']))
 
         # save que to disk
         with open('que.obj','wb') as queue_save_file:
@@ -289,8 +289,14 @@ class Train(Resource):
         if 'model_name' not in req:
             abort_missing_parameter('model_name')
 
-        if 'data_location' not in req:
-            abort_missing_parameter('data_location')
+        if 'dataset_name' not in req:
+            abort_missing_parameter('dataset_name')
+
+        if 'train_ids' not in req:
+            abort_missing_parameter('train_ids')
+            
+        if 'val_ids' not in req:
+            abort_missing_parameter('val_ids') 
 
         # Generate a random model id
         model_id = str(uuid.uuid4())

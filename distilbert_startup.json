@@ -12,12 +12,28 @@
 			"description": "A short expressive model name."
 		},
 		{
-			"name": "data_location",
+			"name": "dataset_name",
 			"type": "STRING",
 			"value_list": null,
 			"optional": false,
 			"default": null,
-			"description": "The remote location where the training data can be loaded."
+			"description": "The name or descriptor of the data set."
+		},
+		{
+			"name": "train_ids",
+			"type": "STRING",
+			"value_list": null,
+			"optional": false,
+			"default": null,
+			"description": "List of document ids for training set."
+		},
+		{
+			"name": "val_ids",
+			"type": "STRING",
+			"value_list": null,
+			"optional": false,
+			"default": null,
+			"description": "List of document ids for validation set."
 		},
 		{
 			"name": "best_model",

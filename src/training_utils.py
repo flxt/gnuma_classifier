@@ -1,4 +1,4 @@
-from datasets import load_dataset
+from datasets import Dataset
 from sklearn.metrics import accuracy_score, f1_score
 from transformers import AutoTokenizer, DataCollatorForTokenClassification
 from transformers import AutoModelForTokenClassification, TrainingArguments
@@ -6,6 +6,8 @@ from transformers import TrainerCallback
 
 from sqlitedict import SqliteDict
 import numpy as np
+import json
+import requests
 
 from src.bunny import BunnyPostalService
 from src.utils import InterruptState, log
@@ -42,44 +44,83 @@ class DataHelper():
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
         log('Set up tokenizer and data collector', 'DEBUG')
 
+        with open('service_address.json') as json_file:
+            dat = json.load(json_file)
+            self._doc_address = dat['doc_address']
+
+        log(self._doc_address)
+
+    # methods gets a document from the document service
+    def get_doc(self, doc_id):
+        response = requests.get(f'http://{self._doc_address}/api/v1/'
+            f'documents/{doc_id}')
+        sentences = response.json()['sentences']
+
+        tokens = []
+        ner_tags = []
+        ids = []
+
+        for sentence in sentences:
+            tok_temp = []
+            ner_temp = []
+            for token in sentence['tokens']:
+                tok_temp.append(token['token'])
+                ner_temp.append(get_int_labels(token['nerTag']))
+
+            tokens.append(tok_temp)
+            ner_tags.append(ner_temp)
+            ids.append(sentence['id'])
+
+        return tokens, ner_tags, ids
+
     # get the data and prepare it for 
     # for now it only loads the wnut_17 data set
-    def get_data(self, model_id):
-        wnut = load_dataset('conll2003')
+    def get_data(self, doc_ids):
+        tokens = []
+        ner_tags = []
+        ids = []
+        #rotate through all documents to build a data set
+        for doc_id in doc_ids:
+            tok_temp, ner_temp, id_temp = self.get_doc(doc_id)
+            tokens += tok_temp
+            ner_tags += ner_temp
+            ids += id_temp
 
-        data = wnut.map(self.tokenize_and_align_labels, batched=True)
-        num_labels = len(wnut["train"].features[f"ner_tags"].feature.names)
 
-        log(f'Prepared data for model {model_id}', 'DEBUG')
+        ds = Dataset.from_dict({'id': ids, 'tokens': tokens, 
+            'ner_tags': ner_tags})
 
-        return data, num_labels
+        data = ds.map(self.tokenize_and_align_labels)
+
+        return data
 
 
     # method to tokenize and allign labels
     # taken from the hugging face documentation
     def tokenize_and_align_labels(self, examples):
+        log(examples['ner_tags'])
+
         tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, 
             is_split_into_words=True)
 
-        labels = []
-        for i, label in enumerate(examples[f"ner_tags"]):
-            # Map tokens to their respective word.
-            word_ids = tokenized_inputs.word_ids(batch_index=i)  
-            previous_word_idx = None
-            label_ids = []
-            for word_idx in word_ids:
-                # Set the special tokens to -100.                          
-                if word_idx is None:
-                    label_ids.append(-100)
-                # Only label the first token of a given word.
-                elif word_idx != previous_word_idx:             
-                    label_ids.append(label[word_idx])
+        label_ids = []
+        word_ids = tokenized_inputs.word_ids()  
+        previous_word_idx = None
 
-            labels.append(label_ids)
+        for word_idx in word_ids:
+            # Set the special tokens to -100.                          
+            if word_idx is None:
+                label_ids.append(-100)
+            # Only label the first token of a given word.
+            elif word_idx != previous_word_idx:
+          
+                label_ids.append(examples['ner_tags'][word_idx])
 
-        tokenized_inputs["labels"] = labels
+
+        tokenized_inputs["labels"] = label_ids
 
         log('Tokenized and alligned labels', 'DEBUG')
+        log(tokenized_inputs)
         return tokenized_inputs
 
 #callback that check if training is supposed to be interrupted
@@ -143,3 +184,7 @@ def compute_metrics(pred):
         'accuracy': acc,
         'f1': f1
     }
+
+def get_int_labels(ner_tag):
+     tags = {'O': 0, 'B-PER': 1, 'I-PER': 2, 'B-ORG': 3, 'I-ORG': 4, 'B-LOC': 5, 'I-LOC': 6, 'B-MISC': 7, 'I-MISC': 8}
+     return tags[ner_tag]

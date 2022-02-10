@@ -11,5 +11,8 @@ checkpoints/*
 # RabbitMQ credentials
 rabbitmq_creds.json
 
+# Server Address
+service_address.json
+
 # the save que object
 que.obj
