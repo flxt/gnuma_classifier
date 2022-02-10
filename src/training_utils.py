@@ -98,8 +98,6 @@ class DataHelper():
     # method to tokenize and allign labels
     # taken from the hugging face documentation
     def tokenize_and_align_labels(self, examples):
-        log(examples['ner_tags'])
-
         tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, 
             is_split_into_words=True)
 
@@ -120,7 +118,7 @@ class DataHelper():
         tokenized_inputs["labels"] = label_ids
 
         log('Tokenized and alligned labels', 'DEBUG')
-        log(tokenized_inputs)
+
         return tokenized_inputs
 
 #callback that check if training is supposed to be interrupted

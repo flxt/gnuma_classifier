@@ -264,7 +264,7 @@ class List(Resource):
             for model_id in db.keys():
                 model_list.append({'model_id': model_id, 
                     'model_name': db[model_id]['model_name'], 
-                    'data': db[model_id]['data_location'], 
+                    'data': db[model_id]['dataset_id'], 
                     'status': db[model_id]['status']})
 
         return model_list
@@ -289,8 +289,8 @@ class Train(Resource):
         if 'model_name' not in req:
             abort_missing_parameter('model_name')
 
-        if 'dataset_name' not in req:
-            abort_missing_parameter('dataset_name')
+        if 'dataset_id' not in req:
+            abort_missing_parameter('dataset_id')
 
         if 'train_ids' not in req:
             abort_missing_parameter('train_ids')

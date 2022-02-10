@@ -103,7 +103,7 @@ def train_new_model(model_id: str, stop: InterruptState,
     val_data = dh.get_data(model_info['val_ids'])
 
     num_labels = np.unique(train_data['ner_tags']).size
-    log(num_labels)
+    log(f'NUM LABELS => {num_labels}')
     num_labels = 9
 
     # Define a new model
@@ -181,8 +181,6 @@ def continue_training_model(model_id: str, stop: InterruptState,
     bux: BunnyPostalService):
     # Get a list of all checkpoints
     cp_list = os.listdir(f'./checkpoints/{model_id}')
-    # Sort the list in a way that the last checkpoint is in the first spot.
-    cp_list.sort(reverse = True)
 
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
@@ -193,10 +191,20 @@ def continue_training_model(model_id: str, stop: InterruptState,
             f'{status}cant be continued.')
         return
 
+    # find newest checkpoint
+    cp_val = -1
+    for cp in cp_list:
+        cp_val_temp = int(cp.split('-')[1])
+        if cp_val_temp > cp_val:
+            cp_val = cp_val_temp
+
     # Get the data
     dh = DataHelper()
     train_data = dh.get_data(model_info['train_ids'])
     val_data = dh.get_data(model_info['val_ids'])
+
+    # Get the training Arguments
+    training_args = get_training_args(model_id)
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
@@ -218,13 +226,12 @@ def continue_training_model(model_id: str, stop: InterruptState,
     # Update the model info that the model is training
     with SqliteDict('./distilBERT.sqlite') as db:
         model_info['status'] = 'training'
-        model_info['num_labels'] = num_labels
         db[model_id] = model_info
         db.commit()
 
     # Continue training the model if no interruption
     log(f'Continueing the training for model {model_id}')
-    trainer.train(f'./checkpoints/{cp_list[0]}')
+    trainer.train(f'./checkpoints/{model_id}/checkpoint-{cp_val}')
 
     # Training done
     # Case: Training finished normally
@@ -366,6 +373,8 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     # bux send results to rabbit mq
     bux.deliver_prediction(model_id, tokens, predictions)
+
+    log(f'Prediction finished for model {model_id}')
 
 
 # Call this method to predict text with a model

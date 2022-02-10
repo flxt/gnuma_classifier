@@ -12,7 +12,7 @@
 			"description": "A short expressive model name."
 		},
 		{
-			"name": "dataset_name",
+			"name": "dataset_id",
 			"type": "STRING",
 			"value_list": null,
 			"optional": false,
