@@ -47,28 +47,30 @@ def training_thread(q: Queue, stop: InterruptState,
             log(f'Got model {model_id} with operation type'
                 f'{op_type} from the queue')
 
-            #try:
-            if (op_type == 'train'):
-                train_new_model(model_id, stop, bux)
-            elif (op_type == 'continue'):
-                continue_training_model(model_id, stop, bux)
-            elif (op_type == 'evaluate'):
-                data_id = ele.get_text()
-                evaluate_model(model_id, stop, bux, data_id)
-            elif (op_type == 'predict_text'):
-                text = ele.get_text() 
-                predict_text(model_id, stop, bux, text)
-            elif (op_type == 'predict'):
-                doc_id =  ele.get_text()
-                predict_data(model_id, stop, bux, doc_id)
-            else:
-                log(f'Wrong operation type {op_type} for model {model_id}', 
-                    'ERROR')
-            #except Exception as e:
-            #    log(f'Excpetion occured during training: {e}', 'ERROR')
-             #   
-             #   bux.deliver_error_message(f'Error during traing.\n'
-              #      f'Exception: {e}')
+            try:
+                if (op_type == 'train'):
+                    train_new_model(model_id, stop, bux)
+                elif (op_type == 'continue'):
+                    continue_training_model(model_id, stop, bux)
+                elif (op_type == 'evaluate'):
+                    data_id = ele.get_text()
+                    evaluate_model(model_id, stop, bux, data_id)
+                elif (op_type == 'predict_text'):
+                    text = ele.get_text() 
+                    predict_text(model_id, stop, bux, text)
+                elif (op_type == 'predict'):
+                    doc_id =  ele.get_text()
+                    predict_data(model_id, stop, bux, doc_id)
+                else:
+                    log(f'Wrong operation type {op_type} for model {model_id}', 
+                        'ERROR')
+            except Exception as e:
+                # Very rudementary for now
+                # Error Occurs => cancel training 
+                log(f'Excpetion occured during training: {e}', 'ERROR')
+                
+                bux.deliver_error_message(f'Error during traing.\n'
+                    f'Exception: {e}')
 
             current_model_id = None
 

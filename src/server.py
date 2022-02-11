@@ -108,7 +108,7 @@ def main():
     t.start()
 
     # Start the APP
-    app.run(debug=True, use_reloader=False, port = 4793)
+    app.run(debug=False, use_reloader=False, port = 4793, host = '0.0.0.0')
 
 if __name__ == '__main__':
     try:

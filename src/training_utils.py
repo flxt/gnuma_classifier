@@ -131,7 +131,7 @@ class InterruptCallback(TrainerCallback):
     def on_step_end(self, args, state, control, **kwargs):
         if (self._stop.get_state() > 0):
             if (self._stop.get_state() == 1):
-                control.should_evaluate = True
+                control.should_evaluate = False
                 control.should_save = True 
             control.should_training_stop = True
 
