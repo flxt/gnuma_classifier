@@ -85,8 +85,8 @@ def train_new_model(model_id: str, stop: InterruptState,
         defaults = json.load(json_file)
 
     for key in defaults.keys():
-        if key not in model_info:
-            model_info[key] = defaults[key]
+        if key not in model_info['hyper_parameters']:
+            model_info['hyper_parameters'][key] = defaults[key]
 
     #save to key value store
     with SqliteDict('./distilBERT.sqlite') as db:
@@ -101,12 +101,10 @@ def train_new_model(model_id: str, stop: InterruptState,
 
     # Get the data
     dh = DataHelper()
-    train_data = dh.get_data(model_info['train_ids'])
-    val_data = dh.get_data(model_info['val_ids'])
+    train_data = dh.get_data(model_id, model_info['train_ids'])
+    val_data = dh.get_data(model_id, model_info['val_ids'])
 
-    num_labels = np.unique(train_data['ner_tags']).size
-    log(f'NUM LABELS => {num_labels}')
-    num_labels = 9
+    num_labels = len(model_info['hyper_parameters'])
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
@@ -125,19 +123,17 @@ def train_new_model(model_id: str, stop: InterruptState,
             compute_metrics = compute_metrics
             )
 
+    model_info['status'] = 'training'
+    model_info['num_labels'] = num_labels
+
     # Update the model info that the model is training
     with SqliteDict('./distilBERT.sqlite') as db:
-        model_info = db[model_id]
-        model_info['status'] = 'training'
-        model_info['num_labels'] = num_labels
         db[model_id] = model_info
         db.commit()
 
     # Start training the model if no interruption
     log(f'Starting the training for model {model_id}')
     trainer.train()
-
-    log(model.config.id2label)
 
     # Training done
     # Case: Training finished normally
@@ -150,9 +146,9 @@ def train_new_model(model_id: str, stop: InterruptState,
         remove_checkpoints(model_id)
 
         # Update the model info is trained
+        model_info['status'] = 'trained'
+
         with SqliteDict('./distilBERT.sqlite') as db:
-            model_info = db[model_id]
-            model_info['status'] = 'trained'
             db[model_id] = model_info
             db.commit()
 
@@ -163,9 +159,9 @@ def train_new_model(model_id: str, stop: InterruptState,
     # Case: Training was interrupted
     elif (stop.get_state() == 1): 
         # Update the model info that the model was interrupted
+        model_info['status'] = 'interrupted'
+
         with SqliteDict('./distilBERT.sqlite') as db:
-            model_info = db[model_id]
-            model_info['status'] = 'interrupted'
             db[model_id] = model_info
             db.commit()
 
@@ -202,8 +198,8 @@ def continue_training_model(model_id: str, stop: InterruptState,
 
     # Get the data
     dh = DataHelper()
-    train_data = dh.get_data(model_info['train_ids'])
-    val_data = dh.get_data(model_info['val_ids'])
+    train_data = dh.get_data(model_id, model_info['train_ids'])
+    val_data = dh.get_data(model_id, model_info['val_ids'])
 
     # Get the training Arguments
     training_args = get_training_args(model_id)
@@ -226,8 +222,9 @@ def continue_training_model(model_id: str, stop: InterruptState,
             )
 
     # Update the model info that the model is training
+    model_info['status'] = 'training'
+
     with SqliteDict('./distilBERT.sqlite') as db:
-        model_info['status'] = 'training'
         db[model_id] = model_info
         db.commit()
 
@@ -246,9 +243,9 @@ def continue_training_model(model_id: str, stop: InterruptState,
         remove_checkpoints(model_id)
 
         # Update the model info is trained
+        model_info['status'] = 'trained'
+
         with SqliteDict('./distilBERT.sqlite') as db:
-            model_info = db[model_id]
-            model_info['status'] = 'trained'
             db[model_id] = model_info
             db.commit()
 
@@ -260,9 +257,9 @@ def continue_training_model(model_id: str, stop: InterruptState,
     # Case: Training was interrupted
     elif (stop.get_state() == 1): 
         # Update the model info that the model was interrupted
+        model_info['status'] = 'interrupted'
+
         with SqliteDict('./distilBERT.sqlite') as db:
-            model_info = db[model_id]
-            model_info['status'] = 'interrupted'
             db[model_id] = model_info
             db.commit()
 
@@ -294,7 +291,7 @@ def evaluate_model(model_id: str, stop: InterruptState,
 
     # Get the evaluation data
     dh = DataHelper()
-    data = dh.get_data(data_id)
+    data = dh.get_data(model_id, data_id)
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
@@ -318,10 +315,8 @@ def evaluate_model(model_id: str, stop: InterruptState,
     out = trainer.evaluate(eval_dataset = data)
 
     metrics = {}
-    metrics['eval_loss'] = out['eval_loss']
     metrics['eval_accuracy'] = out['eval_accuracy']
     metrics['eval_f1'] = out['eval_f1']
-
 
     bux.deliver_eval_results(model_id, metrics)
 
@@ -381,7 +376,7 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
 # Call this method to predict text with a model
 def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, 
-    doc_ids: str):
+    doc_id: str):
     
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
@@ -406,7 +401,7 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     # todo
     dh = DataHelper()
-    data = dh.get_data(doc_ids)
+    data = dh.get_data(model_id, [doc_id])
 
     # Define the trainer
     trainer = Trainer(

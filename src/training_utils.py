@@ -14,26 +14,26 @@ from src.utils import InterruptState, log
 
 # returns the training arguments. values are taken from from model_info
 def get_training_args(model_id):
-    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+    hyper_parameters = SqliteDict('./distilBERT.sqlite')[model_id]['hyper_parameters']
 
     log(f'Returning training arguments based on kv-store info for model '
         f'{model_id}', 'DEBUG')
 
     return TrainingArguments(
         output_dir = f'./checkpoints/{model_id}',
-        learning_rate = model_info['learning_rate'],
-        per_device_train_batch_size = model_info['batch_size'],
-        per_device_eval_batch_size = model_info['batch_size'],
-        num_train_epochs = model_info['epochs'],
-        weight_decay = model_info['adam_weigth_decay'],
-        warmup_ratio = model_info['warmup_ratio'],
-        load_best_model_at_end = model_info['best_model'],
+        learning_rate = hyper_parameters['learning_rate'],
+        per_device_train_batch_size = hyper_parameters['batch_size'],
+        per_device_eval_batch_size = hyper_parameters['batch_size'],
+        num_train_epochs = hyper_parameters['epochs'],
+        weight_decay = hyper_parameters['adam_weigth_decay'],
+        warmup_ratio = hyper_parameters['warmup_ratio'],
+        load_best_model_at_end = hyper_parameters['best_model'],
         evaluation_strategy = 'steps',
-        save_steps = model_info['steps'],
-        eval_steps = model_info['steps'],
-        adam_beta1 = model_info['adam_beta1'],
-        adam_beta2 = model_info['adam_beta2'],
-        adam_epsilon = model_info['adam_epsilon'],
+        save_steps = hyper_parameters['steps'],
+        eval_steps = hyper_parameters['steps'],
+        adam_beta1 = hyper_parameters['adam_beta1'],
+        adam_beta2 = hyper_parameters['adam_beta2'],
+        adam_epsilon = hyper_parameters['adam_epsilon'],
         )
 
 class DataHelper():
@@ -44,16 +44,9 @@ class DataHelper():
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
         log('Set up tokenizer and data collector', 'DEBUG')
 
-        with open('service_address.json') as json_file:
-            dat = json.load(json_file)
-            self._doc_address = dat['doc_address']
-
-        log(self._doc_address)
-
     # methods gets a document from the document service
-    def get_doc(self, doc_id):
-        response = requests.get(f'http://{self._doc_address}/api/v1/'
-            f'documents/{doc_id}')
+    def get_doc(self, model_id, doc_id):
+        response = requests.get(self._doc_address)
         sentences = response.json()['sentences']
 
         tokens = []
@@ -65,7 +58,7 @@ class DataHelper():
             ner_temp = []
             for token in sentence['tokens']:
                 tok_temp.append(token['token'])
-                ner_temp.append(get_int_labels(token['nerTag']))
+                ner_temp.append(get_int_labels(model_id, token['nerTag']))
 
             tokens.append(tok_temp)
             ner_tags.append(ner_temp)
@@ -75,13 +68,13 @@ class DataHelper():
 
     # get the data and prepare it for 
     # for now it only loads the wnut_17 data set
-    def get_data(self, doc_ids):
+    def get_data(self, model_id, doc_ids):
         tokens = []
         ner_tags = []
         ids = []
         #rotate through all documents to build a data set
         for doc_id in doc_ids:
-            tok_temp, ner_temp, id_temp = self.get_doc(doc_id)
+            tok_temp, ner_temp, id_temp = self.get_doc(model_id, doc_id)
             tokens += tok_temp
             ner_tags += ner_temp
             ids += id_temp
@@ -183,6 +176,6 @@ def compute_metrics(pred):
         'f1': f1
     }
 
-def get_int_labels(ner_tag):
-     tags = {'O': 0, 'B-PER': 1, 'I-PER': 2, 'B-ORG': 3, 'I-ORG': 4, 'B-LOC': 5, 'I-LOC': 6, 'B-MISC': 7, 'I-MISC': 8}
+def get_int_labels(model_id: str, ner_tag):
+     tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
      return tags[ner_tag]

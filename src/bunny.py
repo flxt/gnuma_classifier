@@ -30,12 +30,15 @@ class BunnyPostalService():
         self._exchange = creds['rabbit_mq_exchange']
         self._routing_key = creds['rabbit_mq_routing_key']
 
+        self._address = 'tba'
+
         self._channel.exchange_declare(exchange = self._exchange, 
             exchange_type='fanout')
 
     # The BunnyPostalServices delivers your message to the distilbert exchange.
     def send_message(self, message, event):
         log(f'Send {event} message to exchange: {message}')
+        message['address'] = slef._address
         self._channel.basic_publish(exchange = self._exchange, 
             routing_key = self._routing_key, body = json.dumps(message), 
             properties = pika.BasicProperties(headers={'event': event}))
@@ -61,6 +64,7 @@ class BunnyPostalService():
 
         self.send_message(message, 'TrainingUpdate')
 
+    # The BunnyPostalService delivers the results of an ecvaluation
     def deliver_eval_results(self, model_id, metrics):
         metric_list = []
 
@@ -72,16 +76,29 @@ class BunnyPostalService():
 
         self.send_message(message, 'EvaluationFinished')
 
-    def deliver_prediction(self, model_id, tokens, labels):
+    # The BunnyPostalService delivers the results of an prediction on a text
+    def deliver_text_prediction(self, model_id, tokens, labels):
         prediction_list = []
 
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 
         'tokens': tokens, 'labels': labels}
 
-        self.send_message(message, 'PredictionFinished')
+        self.send_message(message, 'PredictionFinishedText')
 
-    def deliver_error_message(self, message):
-        self.send_message(message, 'ClassifierError')
+    # The BunnyPostalService delivers the results of a 
+    # prediction on a document
+    def deliver_data_prediction(self, model_id, tokens, labels):
+        prediction_list = []
+
+        message = {'classifier_id': 'distilbert', 'model_id': model_id, 
+        'tokens': tokens, 'labels': labels}
+
+        self.send_message(message, 'PredictionFinishedData')
+
+    # The BunnyPostalService delivers an error message
+    def deliver_error_message(self, model_id, message):
+        msg_dict = {'model_id': model_id, 'error_message': message}
+        self.send_message(msg_dict, 'ClassifierError')
 
 
 # Listening to rabbit to check if supposed to say hello
@@ -97,15 +114,15 @@ def bunny_listening_thread(bux: BunnyPostalService):
     channel = connection.channel()
     exchange = creds['rabbit_mq_exchange']
     routing_key = creds['rabbit_mq_routing_key']
-    channel.queue_declare(queue = creds['rabbit_mq_queue'])
-    channel.queue_bind(creds['rabbit_mq_queue'], exchange)
+    channel.queue_declare(queue = 'distilbert_listen')
+    channel.queue_bind('distilbert_listen', exchange)
 
     def bunny_callback(ch, method, properties, body):
         #check if supposed to send hello message
         if properties.headers['event'] == 'ExperimentStart':
             bux.say_hello()
 
-    channel.basic_consume(queue=creds['rabbit_mq_queue'], 
+    channel.basic_consume(queue='distilbert_listen', 
         on_message_callback=bunny_callback, auto_ack=False)
 
     # catch keyboard interrupts
@@ -122,4 +139,4 @@ def bunny_alive_thread(bux: BunnyPostalService):
         time.sleep(10)
 
         # wakes up to say hello
-        bux.send_message('OwO', 'ClassifierAlive')
+        bux.send_message({}, 'ClassifierAlive')

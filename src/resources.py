@@ -77,7 +77,7 @@ class Base(Resource):
 
         delete_model(model_id)
 
-        return {'model_id':model_id, 'operation':'deleted'}
+        return
 
 
 class Continue(Resource):
@@ -111,7 +111,7 @@ class Continue(Resource):
 
         log(f'Put model {model_id} in queue to continue training')
 
-        return {'model_id':model_id, 'operation':'continue'}
+        return
 
 
 # API endpoint for interrupting the training to continue later
@@ -182,19 +182,18 @@ class PredictText(Resource):
 
         req = request.json
 
-        if 'sequence' not in req:
+        if 'text' not in req:
             abort_missing_parameter('sequence')
 
         # put prediction request in the que
-        self._q.put(QueueElement(model_id, self._op_type, req['sequence']))
+        self._q.put(QueueElement(model_id, self._op_type, req['text']))
 
         # save que to disk
         with open('que.obj', 'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
         log(f'Put model {model_id} in queue for text prediction')
 
-        return {'model_id':model_id, 'operation':'predict'}
-
+        return
 # API endpoint for classifying data wiht a specified model
 class Predict(Resource):
 
@@ -217,9 +216,6 @@ class Predict(Resource):
 
         req = request.json
 
-        log(req.keys())
-        log('data_id' in req.keys())
-
         if 'doc_ids' not in req:
             abort_missing_parameter('doc_ids')
 
@@ -232,7 +228,7 @@ class Predict(Resource):
 
         log(f'Put model {model_id} in queue for prediction')
 
-        return {'model_id':model_id, 'operation':'predict'}
+        return
 
 
 # API endpoint for given some labeled data for testing to the model.
@@ -269,8 +265,7 @@ class Evaluate(Resource):
 
         log(f'Put model {model_id} in queue for evaluation')
 
-        return {'model_id':model_id, 'operation':'evaluate'}
-
+        return
 
 # API endpoint for returning a list of all saved models.
 class List(Resource):
@@ -282,7 +277,7 @@ class List(Resource):
             for model_id in db.keys():
                 model_list.append({'model_id': model_id, 
                     'model_name': db[model_id]['model_name'], 
-                    'data': db[model_id]['dataset_id'], 
+                    'dataset_id': db[model_id]['dataset_id'], 
                     'status': db[model_id]['status']})
 
         return model_list
@@ -316,13 +311,25 @@ class Train(Resource):
         if 'val_ids' not in req:
             abort_missing_parameter('val_ids') 
 
+        if 'label_mapping' not in req:
+            abort_missing_parameter('label_mapping') 
+
         # Generate a random model id
         model_id = str(uuid.uuid4())
 
+        # No duplicate model ids :(
+        while (model_id in SqliteDict('./distilBERT.sqlite')):
+            model_id = str(uuid.uuid4())
+
+        req['model_id'] = model_id
+        req['status'] = 'in_que'
+
+        #remove later. moch up for now
+        req['label_mapping'] = {'O': 0, 'B-PER': 1, 'I-PER': 2, 'B-ORG': 3, 
+            'I-ORG': 4, 'B-LOC': 5, 'I-LOC': 6, 'B-MISC': 7, 'I-MISC': 8}
+
         # Save the model info
         with SqliteDict('./distilBERT.sqlite') as db:
-            req['model_id'] = model_id
-            req['status'] = 'in_que'
             db[model_id] = req
             db.commit()
 
@@ -335,4 +342,4 @@ class Train(Resource):
 
         log(f'Put model {model_id} in queue for training')
 
-        return {'model_id':model_id, 'operation':'train'}
+        return {'model_id':model_id}
