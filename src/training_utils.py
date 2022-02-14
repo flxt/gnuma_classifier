@@ -60,7 +60,7 @@ class DataHelper():
             ner_temp = []
             for token in sentence['tokens']:
                 tok_temp.append(token['token'])
-                ner_temp.append(self.get_int_labels(token['nerTag']))
+                ner_temp.append(self._convert_labels(token['nerTag']))
 
             tokens.append(tok_temp)
             ner_tags.append(ner_temp)
@@ -116,8 +116,10 @@ class DataHelper():
 
         return tokenized_inputs
 
-    def get_int_labels(self, ner_tag):
+    # convert str tag to int
+    def _convert_labels(self, ner_tag):
         return self._tags[ner_tag]
+
 
 #callback that check if training is supposed to be interrupted
 class InterruptCallback(TrainerCallback):

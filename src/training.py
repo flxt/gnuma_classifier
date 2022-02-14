@@ -82,12 +82,12 @@ def train_new_model(model_id: str, stop: InterruptState,
     # Check if default values are needed and set them accordingly
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
     
-    with open('./defaults.json') as json_file:
-        defaults = json.load(json_file)
+    with open('./distilbert_startup.json') as json_file:
+        startup = json.load(json_file)
 
-    for key in defaults.keys():
-        if key not in model_info['hyper_parameters']:
-            model_info['hyper_parameters'][key] = defaults[key]
+    for param in startup['hyper_parameters']:
+        if param['name'] not in model_info['hyper_parameters']:
+            model_info['hyper_parameters'][param['name']] = param['default']
 
     #save to key value store
     with SqliteDict('./distilBERT.sqlite') as db:
@@ -361,7 +361,6 @@ def predict_text(model_id: str, stop: InterruptState,
     inputs = tokenizer(sequence, return_tensors="pt")
     tokens = inputs.tokens()
 
-
     log(inputs, 'DEBUG')
 
     # get model output
@@ -372,6 +371,16 @@ def predict_text(model_id: str, stop: InterruptState,
 
     #convert to list
     predictions = predictions.tolist()[0]
+
+    #define stuff for changing back to original labels
+    tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
+    reverse_tags = {v: k for k, v in tags.items()}
+
+    def conv_labels(tag):
+        return reverse_tags[tag]
+
+    # change labels to strings
+    predictions = list(map(conv_labels, predictions))
 
     log(predictions)
 
@@ -428,10 +437,21 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     results = trainer.predict(data)
     preds = np.argmax(results[0], 2)
 
+    #define stuff for changing back to original labels
+    tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
+    reverse_tags = {v: k for k, v in tags.items()}
+
+    def conv_labels(tag):
+        return reverse_tags[tag]
+
     # remove the padding. saddly iteratively
     pred_data = []
     for i, val in enumerate(token_data):
-        pred_data.append(list(map(int, preds[i][1:len(val) + 1])))
+        # first: select remove the [CLS], [SEP] and [PAD] tokens
+        # second: map the values to ints
+        # third: convert those to string labels
+        pred_data.append(list(
+            map(conv_labels, map(int, preds[i][1:len(val) + 1]))))
 
     bux.deliver_data_prediction(model_id, token_data, pred_data, doc_id)
 

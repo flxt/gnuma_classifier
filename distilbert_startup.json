@@ -1,6 +1,6 @@
 {
 	"classifier_name": "distilbert",
-	"hyperParameters": 
+	"hyper_parameters": 
 	[
 		{
 			"name": "best_model",
