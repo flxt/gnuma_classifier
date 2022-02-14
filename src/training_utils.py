@@ -34,6 +34,7 @@ def get_training_args(model_id):
         adam_beta1 = hyper_parameters['adam_beta1'],
         adam_beta2 = hyper_parameters['adam_beta2'],
         adam_epsilon = hyper_parameters['adam_epsilon'],
+        logging_steps = 100,
         )
 
 class DataHelper():
@@ -91,7 +92,7 @@ class DataHelper():
 
 
     # method to tokenize and allign labels
-    # taken from the hugging face documentation
+    # partly taken from the hugging face documentation
     def tokenize_and_align_labels(self, examples):
         tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, 
             is_split_into_words=True)
@@ -141,7 +142,8 @@ class EvaluateCallback(TrainerCallback):
     def __init__(self, bux: BunnyPostalService, model_id: str):
         self._bux = bux
         self._model_id = model_id
-        self._metrics = {'eval_loss': -1, 'eval_accuracy': -1, 'eval_f1': -1}
+        self._metrics = {'train_loss': -1, 'eval_loss': -1, 
+            'eval_accuracy': -1, 'eval_f1': -1}
         self._finished = False
 
     # check after every training step if training should stop
@@ -153,6 +155,12 @@ class EvaluateCallback(TrainerCallback):
         if self._finished:
             self._bux.give_update(self._model_id, self._finished, 
                 state.global_step, state.max_steps, state.epoch, self._metrics)
+
+    def on_log(self, args, state, control, logs, **kwargs):
+        # Not always in to log file
+        # My guess is it is not there if there was an evaluation step
+        if 'loss' in logs:
+            self._metrics['train_loss'] = logs['loss']
 
     # first update when the training starts
     def on_step_begin(self, args, state, control, **kwargs):
