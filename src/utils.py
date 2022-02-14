@@ -40,6 +40,18 @@ class InterruptState():
     def set_state(self, x):
         self._stop = x
 
+# Saves current model if
+class CurrentModel():
+
+    def __init__(self):
+        self._id = ''
+
+    def set_id(self, id):
+        self._id = id 
+
+    def get_id(self):
+        return self._id
+
 
 # Methods that removes checkpoints for model if checkpoints exist.
 def remove_checkpoints(model_id):

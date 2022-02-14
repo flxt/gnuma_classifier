@@ -13,7 +13,8 @@ import dill
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate 
 from src.resources import Continue, List, Train, Predict
 from src.training import training_thread
-from src.utils import InterruptState, check_model, delete_model, log
+from src.utils import InterruptState, check_model, delete_model
+from src.utils import log, CurrentModel
 from src.bunny import BunnyPostalService, bunny_listening_thread
 from src.bunny import bunny_alive_thread
 
@@ -27,28 +28,27 @@ def main():
     # Delete all models that are in a faulty state
     keys = SqliteDict('./distilBERT.sqlite').keys()
     for model_id in keys:
-        check_model(model_id)
-
-        # delete model with status training unless checkpoints where saved.
-        # In that case change its status to interrupted, so training
-        # can be continued.
-        if SqliteDict('./distilBERT.sqlite')[model_id]['status'] == 'training':
-            if os.path.isdir(f'./checkpoints/{model_id}'):
-                #log(SqliteDict('./distilBERT.sqlite')[model_id]['status'])
-                with SqliteDict('./distilBERT.sqlite') as db:
-                    model_info = db[model_id]
-                    model_info['status'] = 'interrupted'
-                    db[model_id] = model_info
-                    db.commit()
-                #log(SqliteDict('./distilBERT.sqlite')[model_id]['status'])
-            else:
-                delete_model(model_id)
+        if check_model(model_id):
+            # delete model with status training unless checkpoints where saved.
+            # In that case change its status to interrupted, so training
+            # can be continued.
+            if SqliteDict('./distilBERT.sqlite')[model_id]['status'] == 'training':
+                if os.path.isdir(f'./checkpoints/{model_id}'):
+                    #log(SqliteDict('./distilBERT.sqlite')[model_id]['status'])
+                    with SqliteDict('./distilBERT.sqlite') as db:
+                        model_info = db[model_id]
+                        model_info['status'] = 'interrupted'
+                        db[model_id] = model_info
+                        db.commit()
+                    #log(SqliteDict('./distilBERT.sqlite')[model_id]['status'])
+                else:
+                    delete_model(model_id)
 
     # set interrupt vairable
     stop = InterruptState()
 
     # variable storing the id of the currently trained model
-    current_model_id = None
+    current_model_id = CurrentModel()
 
     # init the bunny postal service
     bux = BunnyPostalService()
@@ -69,13 +69,21 @@ def main():
         q = Queue()
         os.remove('que.obj')
 
+    # if the que is emtpy => delete all models with status 'in_que'
+    if q.empty():
+        keys = SqliteDict('./distilBERT.sqlite').keys()
+        for model_id in keys:
+            if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] 
+                == 'in_que'):
+                delete_model(model_id)
+
     # Add the RestFULL Resources to the api
     api.add_resource(Base, '/distilbert/models/<model_id>', 
         resource_class_kwargs ={'current_model_id': current_model_id})
-    api.add_resource(Interrupt, '/distilbert/interrupt<model_id>', 
+    api.add_resource(Interrupt, '/distilbert/interrupt/<model_id>', 
         resource_class_kwargs ={'stop' : stop, 
         'current_model_id': current_model_id})
-    api.add_resource(Pause, '/distilbert/pause<model_id><model_id>', 
+    api.add_resource(Pause, '/distilbert/pause/<model_id>', 
         resource_class_kwargs ={'stop' : stop, 
         'current_model_id': current_model_id})
     api.add_resource(PredictText, '/distilbert/predict/text/<model_id>', 
@@ -110,7 +118,17 @@ def main():
     t.start()
 
     # Start the APP
-    app.run(debug=False, use_reloader=False, port = 4793, host = '0.0.0.0')
+    try:
+        app.run(debug=False, use_reloader=False, port = 4793, 
+            host = '0.0.0.0')
+    except Exception as e:
+        log('flask crashed', 'ERROR')
+        bux.deliver_error_message('', e)
+
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
 
 if __name__ == '__main__':
     try:

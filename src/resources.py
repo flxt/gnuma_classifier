@@ -9,7 +9,7 @@ import os
 import dill
 
 from src.utils import InterruptState, QueueElement, delete_model, check_model
-from src.utils import log
+from src.utils import log, CurrentModel
 
 
 # Abort if a json file is expected, but not part of the request
@@ -47,7 +47,7 @@ class Base(Resource):
 
     #init ressource
     # init the resource
-    def __init__(self, current_model_id: str):
+    def __init__(self, current_model_id: CurrentModel):
         self._current_model_id = current_model_id
 
     # Return the decription and more info for the model with the given id
@@ -70,8 +70,8 @@ class Base(Resource):
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
 
-        if self._current_model_id == model_id:
-            abort(400, 
+        if self._current_model_id.get_id() == model_id:
+            abort(404, 
                 message = f'Can not delete model {model_id} cause it is'
                 ' currently getting trained.')
 
@@ -118,7 +118,7 @@ class Continue(Resource):
 class Pause(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState, current_model_id: str):
+    def __init__(self, stop: InterruptState, current_model_id: CurrentModel):
         self._stop = stop
         self._current_model_id = current_model_id
 
@@ -131,7 +131,7 @@ class Pause(Resource):
         # can not delete element in the middle of the que
 
         # If current model the specified one, send interuption
-        if model_id == self._current_model_id:
+        if model_id == self._current_model_id.get_id():
             self._stop.set_state(1)
             log('Pause signal sent.')
         return
@@ -141,12 +141,12 @@ class Pause(Resource):
 class Interrupt(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState, current_model_id: str):
+    def __init__(self, stop: InterruptState, current_model_id: CurrentModel):
         self._stop = stop
         self._current_model_id = current_model_id
 
     # Interrupt the Training and discard the model.
-    def delete(self):
+    def delete(self, model_id: str):
         # check if model exists
         if not model_id in SqliteDict('./distilBERT.sqlite').keys():
             abort_wrong_model_id(model_id)
@@ -154,7 +154,7 @@ class Interrupt(Resource):
         # can not delete element in the middle of the que
 
         # If current model the specified one, send interuption
-        if model_id == self._current_model_id:
+        if model_id == self._current_model_id.get_id():
             self._stop.set_state(2)
             log('Interruption signal sent')
         return
@@ -183,7 +183,7 @@ class PredictText(Resource):
         req = request.json
 
         if 'text' not in req:
-            abort_missing_parameter('sequence')
+            abort_missing_parameter('text')
 
         # put prediction request in the que
         self._q.put(QueueElement(model_id, self._op_type, req['text']))

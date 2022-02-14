@@ -35,10 +35,12 @@ class BunnyPostalService():
         self._channel.exchange_declare(exchange = self._exchange, 
             exchange_type='fanout')
 
-    # The BunnyPostalServices delivers your message to the distilbert exchange.
+    # The BunnyPostalServices delivers your message to the distilbert exchange
     def send_message(self, message, event):
+        # Add address for identification
+        message['address'] = self._address
         log(f'Send {event} message to exchange: {message}')
-        message['address'] = slef._address
+
         self._channel.basic_publish(exchange = self._exchange, 
             routing_key = self._routing_key, body = json.dumps(message), 
             properties = pika.BasicProperties(headers={'event': event}))
@@ -51,8 +53,8 @@ class BunnyPostalService():
         self.send_message(startup, 'ClassifierStart')
 
     # The BunnyPostalService gives an update about training
-    def give_update(self, model_id, finished, current_step, total_steps, epoch, 
-        metrics):
+    def give_update(self, model_id, finished, current_step, total_steps, 
+        epoch, metrics):
         metric_list = []
 
         for key, value in metrics.items():
@@ -87,11 +89,11 @@ class BunnyPostalService():
 
     # The BunnyPostalService delivers the results of a 
     # prediction on a document
-    def deliver_data_prediction(self, model_id, tokens, labels):
+    def deliver_data_prediction(self, model_id, tokens, labels, doc_id):
         prediction_list = []
 
         message = {'classifier_id': 'distilbert', 'model_id': model_id, 
-        'tokens': tokens, 'labels': labels}
+        'tokens': tokens, 'labels': labels, 'doc_id': doc_id}
 
         self.send_message(message, 'PredictionFinishedData')
 
@@ -99,6 +101,11 @@ class BunnyPostalService():
     def deliver_error_message(self, model_id, message):
         msg_dict = {'model_id': model_id, 'error_message': message}
         self.send_message(msg_dict, 'ClassifierError')
+
+    # The BunnyPostalService delivers that the training was interrupted
+    def deliver_interrupt_message(self, model_id, pause):
+        message = {'model_id': model_id, 'pause': pause}
+        self.send_message(message, 'ClassifierInterrupt')
 
 
 # Listening to rabbit to check if supposed to say hello
@@ -108,7 +115,8 @@ def bunny_listening_thread(bux: BunnyPostalService):
     # conntect to bunny
     credentials = pika.PlainCredentials(creds['rabbit_mq_user'], 
         creds['rabbit_mq_pass'])
-    connection_params = pika.ConnectionParameters(host=creds['rabbit_mq_host'], 
+    connection_params = pika.ConnectionParameters(
+        host=creds['rabbit_mq_host'], 
         port=creds['rabbit_mq_port'], credentials = credentials)
     connection = pika.BlockingConnection(connection_params)
     channel = connection.channel()

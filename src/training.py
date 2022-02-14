@@ -14,13 +14,13 @@ import dill
 from src.training_utils import DataHelper, get_training_args, InterruptCallback
 from src.training_utils import EvaluateCallback, compute_metrics
 from src.utils import InterruptState, remove_checkpoints, delete_model
-from src.utils import check_model, log
+from src.utils import check_model, log, CurrentModel
 from src.bunny import BunnyPostalService
 
 # method that should be run as thread for training models
 # it is given the q with the models that are supposed to be trained
 def training_thread(q: Queue, stop: InterruptState, 
-    bux: BunnyPostalService, current_model_id):
+    bux: BunnyPostalService, current_model_id: CurrentModel):
 
     log('Training thread alive', 'DEBUG')
     
@@ -42,37 +42,38 @@ def training_thread(q: Queue, stop: InterruptState,
             model_id, op_type = ele.get_info()
 
             # set current model id
-            current_model_id = model_id
+            current_model_id.set_id(model_id)
+
+            log(f'training-thred => {current_model_id}')
 
             log(f'Got model {model_id} with operation type'
                 f'{op_type} from the queue')
 
-            try:
-                if (op_type == 'train'):
-                    train_new_model(model_id, stop, bux)
-                elif (op_type == 'continue'):
-                    continue_training_model(model_id, stop, bux)
-                elif (op_type == 'evaluate'):
-                    data_id = ele.get_text()
-                    evaluate_model(model_id, stop, bux, data_id)
-                elif (op_type == 'predict_text'):
-                    text = ele.get_text() 
-                    predict_text(model_id, stop, bux, text)
-                elif (op_type == 'predict'):
-                    doc_id =  ele.get_text()
-                    predict_data(model_id, stop, bux, doc_id)
-                else:
-                    log(f'Wrong operation type {op_type} for model {model_id}', 
-                        'ERROR')
-            except Exception as e:
-                # Very rudementary for now
-                # Error Occurs => cancel training 
-                log(f'Excpetion occured during training: {e}', 'ERROR')
-                
-                bux.deliver_error_message(f'Error during traing.\n'
-                    f'Exception: {e}')
+ #           try:
+            if (op_type == 'train'):
+                train_new_model(model_id, stop, bux)
+            elif (op_type == 'continue'):
+                continue_training_model(model_id, stop, bux)
+            elif (op_type == 'evaluate'):
+                data_id = ele.get_text()
+                evaluate_model(model_id, stop, bux, data_id)
+            elif (op_type == 'predict_text'):
+                text = ele.get_text() 
+                predict_text(model_id, stop, bux, text)
+            elif (op_type == 'predict'):
+                doc_id =  ele.get_text()
+                predict_data(model_id, stop, bux, doc_id)
+            else:
+                log(f'Wrong operation type {op_type} for model {model_id}', 
+                    'ERROR')
+#            except Exception as e:
+#                # Very rudementary for now
+#                # Error Occurs => cancel training 
+#                log(f'Excpetion occured during training: {e}', 'ERROR')
+#                
+#                bux.deliver_error_message(model_id, e)
 
-            current_model_id = None
+            current_model_id.set_id('')
 
 
 # Call this method to train a new model
@@ -94,15 +95,15 @@ def train_new_model(model_id: str, stop: InterruptState,
         db.commit()
 
     log(f'Updated the info for model {model_id} with default' 
-        f'values if necessary', 'DEBUG')
+        f'values if necessary')
 
     # Get the training Arguments
     training_args = get_training_args(model_id)
 
     # Get the data
-    dh = DataHelper()
-    train_data = dh.get_data(model_id, model_info['train_ids'])
-    val_data = dh.get_data(model_id, model_info['val_ids'])
+    dh = DataHelper(model_id)
+    train_data = dh.get_data(model_info['train_ids'])
+    val_data = dh.get_data(model_info['val_ids'])
 
     num_labels = len(model_info['hyper_parameters'])
 
@@ -165,11 +166,15 @@ def train_new_model(model_id: str, stop: InterruptState,
             db[model_id] = model_info
             db.commit()
 
+        bux.deliver_interrupt_message(model_id, True)
+
         log(f'Training of model {model_id} was interrupted.')
 
     # Case: Training interrupted and model to be deleted
     else:
         delete_model(model_id)
+
+        bux.deliver_interrupt_message(model_id, False)
 
         log(f'Training of model {model_id} was interrupted and the model' 
             f'was deleted.')
@@ -185,7 +190,7 @@ def continue_training_model(model_id: str, stop: InterruptState,
     #check for correct status
     if (model_info['status'] != 'interrupted' or not check_model(model_id)):
         log(f'model {model_id} cant be continued', 'ERROR')
-        bux.deliver_error_message(f'Model {model_id} with status'
+        bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be continued.')
         return
 
@@ -197,9 +202,9 @@ def continue_training_model(model_id: str, stop: InterruptState,
             cp_val = cp_val_temp
 
     # Get the data
-    dh = DataHelper()
-    train_data = dh.get_data(model_id, model_info['train_ids'])
-    val_data = dh.get_data(model_id, model_info['val_ids'])
+    dh = DataHelper(model_id)
+    train_data = dh.get_data(model_info['train_ids'])
+    val_data = dh.get_data(model_info['val_ids'])
 
     # Get the training Arguments
     training_args = get_training_args(model_id)
@@ -263,11 +268,15 @@ def continue_training_model(model_id: str, stop: InterruptState,
             db[model_id] = model_info
             db.commit()
 
+        bux.deliver_interrupt_message(model_id, True)
+
         log(f'Training of model {model_id} was interrupted.')
 
     # Case: Training interrupted and model to be deleted
     else:
         delete_model(model_id)
+
+        bux.deliver_interrupt_message(model_id, False)
 
         log(f'Training of model {model_id} was interrupted and the model was ' 
             f'deleted.')
@@ -282,7 +291,7 @@ def evaluate_model(model_id: str, stop: InterruptState,
     #check for correct status
     if (model_info['status'] != 'trained' or not check_model(model_id)):
         log(f'model {model_id} cant be evaluated', 'ERROR')
-        bux.deliver_error_message(f'Model {model_id} with status'
+        bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be evaluated.')
         return
 
@@ -290,8 +299,8 @@ def evaluate_model(model_id: str, stop: InterruptState,
     training_args = get_training_args(model_id)
 
     # Get the evaluation data
-    dh = DataHelper()
-    data = dh.get_data(model_id, data_id)
+    dh = DataHelper(model_id)
+    data = dh.get_data(data_id)
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
@@ -324,15 +333,15 @@ def evaluate_model(model_id: str, stop: InterruptState,
 
 
 # Call this method to predict text with a model
-def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService, 
-    sequence: str):
+def predict_text(model_id: str, stop: InterruptState, 
+    bux: BunnyPostalService, sequence: str):
     
     model_info = SqliteDict('./distilBERT.sqlite')[model_id]
 
     #check for correct status
     if (model_info['status'] != 'trained' or not check_model(model_id)):
         log(f'model {model_id} cant be predicted', 'ERROR')
-        bux.deliver_error_message(f'Model {model_id} with status'
+        bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be predicted.')
         return
 
@@ -369,7 +378,7 @@ def predict_text(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     log(f'Text prediction for model {model_id} done.')
 
     # bux send results to rabbit mq
-    bux.deliver_prediction(model_id, tokens, predictions)
+    bux.deliver_text_prediction(model_id, tokens, predictions)
 
     log(f'Prediction finished for model {model_id}')
 
@@ -383,7 +392,7 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     #check for correct status
     if (model_info['status'] != 'trained' or not check_model(model_id)):
         log(f'model {model_id} cant be predicted', 'ERROR')
-        bux.deliver_error_message(f'Model {model_id} with status'
+        bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be predicted.')
         return
 
@@ -400,8 +409,8 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     training_args = get_training_args(model_id)
 
     # todo
-    dh = DataHelper()
-    data = dh.get_data(model_id, [doc_id])
+    dh = DataHelper(model_id)
+    data = dh.get_data([doc_id])
 
     # Define the trainer
     trainer = Trainer(
@@ -424,6 +433,6 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     for i, val in enumerate(token_data):
         pred_data.append(list(map(int, preds[i][1:len(val) + 1])))
 
-    bux.deliver_prediction(model_id, token_data, pred_data)
+    bux.deliver_data_prediction(model_id, token_data, pred_data, doc_id)
 
     log(f'Prediction finished for model {model_id}')

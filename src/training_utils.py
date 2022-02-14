@@ -38,15 +38,17 @@ def get_training_args(model_id):
 
 class DataHelper():
 
-    def __init__(self):
+    def __init__(self, model_id):
         self.tokenizer = AutoTokenizer.from_pretrained(
             "distilbert-base-uncased")
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
         log('Set up tokenizer and data collector', 'DEBUG')
 
+        self._tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
+
     # methods gets a document from the document service
-    def get_doc(self, model_id, doc_id):
-        response = requests.get(self._doc_address)
+    def get_doc(self, doc_id):
+        response = requests.get(doc_id)
         sentences = response.json()['sentences']
 
         tokens = []
@@ -58,7 +60,7 @@ class DataHelper():
             ner_temp = []
             for token in sentence['tokens']:
                 tok_temp.append(token['token'])
-                ner_temp.append(get_int_labels(model_id, token['nerTag']))
+                ner_temp.append(self.get_int_labels(token['nerTag']))
 
             tokens.append(tok_temp)
             ner_tags.append(ner_temp)
@@ -68,13 +70,13 @@ class DataHelper():
 
     # get the data and prepare it for 
     # for now it only loads the wnut_17 data set
-    def get_data(self, model_id, doc_ids):
+    def get_data(self, doc_ids):
         tokens = []
         ner_tags = []
         ids = []
         #rotate through all documents to build a data set
         for doc_id in doc_ids:
-            tok_temp, ner_temp, id_temp = self.get_doc(model_id, doc_id)
+            tok_temp, ner_temp, id_temp = self.get_doc(doc_id)
             tokens += tok_temp
             ner_tags += ner_temp
             ids += id_temp
@@ -114,6 +116,9 @@ class DataHelper():
 
         return tokenized_inputs
 
+    def get_int_labels(self, ner_tag):
+        return self._tags[ner_tag]
+
 #callback that check if training is supposed to be interrupted
 class InterruptCallback(TrainerCallback):
 
@@ -143,13 +148,16 @@ class EvaluateCallback(TrainerCallback):
         self._metrics['eval_accuracy'] = metrics['eval_accuracy']
         self._metrics['eval_f1'] = metrics['eval_f1']
 
-        self._bux.give_update(self._model_id, self._finished, 
-            state.global_step, state.max_steps, state.epoch, self._metrics)
+        if self._finished:
+            self._bux.give_update(self._model_id, self._finished, 
+                state.global_step, state.max_steps, state.epoch, self._metrics)
 
     # first update when the training starts
-    def on_train_begin(self, args, state, control, **kwargs):
-        self._bux.give_update(self._model_id, self._finished, 
-            state.global_step, state.max_steps, state.epoch, self._metrics)
+    def on_step_begin(self, args, state, control, **kwargs):
+        # update every 10 steps
+        if(state.global_step % 10 == 0):
+            self._bux.give_update(self._model_id, self._finished, 
+                state.global_step, state.max_steps, state.epoch, self._metrics)
 
     def on_train_end(self, args, state, control, **kwargs):
         self._finished = True
@@ -175,7 +183,3 @@ def compute_metrics(pred):
         'accuracy': acc,
         'f1': f1
     }
-
-def get_int_labels(model_id: str, ner_tag):
-     tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
-     return tags[ner_tag]
