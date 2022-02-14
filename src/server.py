@@ -72,10 +72,12 @@ def main():
     # Add the RestFULL Resources to the api
     api.add_resource(Base, '/distilbert/models/<model_id>', 
         resource_class_kwargs ={'current_model_id': current_model_id})
-    api.add_resource(Interrupt, '/distilbert/interrupt', 
-        resource_class_kwargs ={'stop' : stop})
-    api.add_resource(Pause, '/distilbert/pause', 
-        resource_class_kwargs ={'stop' : stop})
+    api.add_resource(Interrupt, '/distilbert/interrupt<model_id>', 
+        resource_class_kwargs ={'stop' : stop, 
+        'current_model_id': current_model_id})
+    api.add_resource(Pause, '/distilbert/pause<model_id><model_id>', 
+        resource_class_kwargs ={'stop' : stop, 
+        'current_model_id': current_model_id})
     api.add_resource(PredictText, '/distilbert/predict/text/<model_id>', 
         resource_class_kwargs ={'que' : q})
     api.add_resource(Predict, '/distilbert/predict/data/<model_id>', 

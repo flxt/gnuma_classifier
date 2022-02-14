@@ -118,13 +118,22 @@ class Continue(Resource):
 class Pause(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState):
+    def __init__(self, stop: InterruptState, current_model_id: str):
         self._stop = stop
+        self._current_model_id = current_model_id
 
     # Interrupt the training and save the model to continue it later
-    def patch(self):
-        self._stop.set_state(1)
-        log('Interruption signal sent.')
+    def patch(self, model_id: str):
+        # check if model exists
+        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+            abort_wrong_model_id(model_id)
+
+        # can not delete element in the middle of the que
+
+        # If current model the specified one, send interuption
+        if model_id == self._current_model_id:
+            self._stop.set_state(1)
+            log('Pause signal sent.')
         return
 
 
@@ -132,13 +141,22 @@ class Pause(Resource):
 class Interrupt(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState):
+    def __init__(self, stop: InterruptState, current_model_id: str):
         self._stop = stop
+        self._current_model_id = current_model_id
 
     # Interrupt the Training and discard the model.
     def delete(self):
-        self._stop.set_state(2)
-        log('Interruption and deletion signal sent')
+        # check if model exists
+        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+            abort_wrong_model_id(model_id)
+
+        # can not delete element in the middle of the que
+
+        # If current model the specified one, send interuption
+        if model_id == self._current_model_id:
+            self._stop.set_state(2)
+            log('Interruption signal sent')
         return
 
 
