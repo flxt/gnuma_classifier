@@ -18,9 +18,8 @@ from src.utils import check_model, log, CurrentModel
 from src.bunny import BunnyPostalService
 
 # method that should be run as thread for training models
-# it is given the q with the models that are supposed to be trained
 def training_thread(q: Queue, stop: InterruptState, 
-    bux: BunnyPostalService, current_model_id: CurrentModel):
+    bux: BunnyPostalService, current_model_id: CurrentModel, config):
 
     log('Training thread alive', 'DEBUG')
     
@@ -36,7 +35,7 @@ def training_thread(q: Queue, stop: InterruptState,
             ele = q.get()
 
             # save que to disk
-            with open('que.obj','wb') as queue_save_file:
+            with open(config['que'],'wb') as queue_save_file:
                 dill.dump(q, queue_save_file)
 
             model_id, op_type = ele.get_info()
@@ -51,18 +50,18 @@ def training_thread(q: Queue, stop: InterruptState,
 
  #           try:
             if (op_type == 'train'):
-                train_new_model(model_id, stop, bux)
+                train_new_model(model_id, stop, bux, config)
             elif (op_type == 'continue'):
-                continue_training_model(model_id, stop, bux)
+                continue_training_model(model_id, stop, bux, config)
             elif (op_type == 'evaluate'):
                 data_id = ele.get_text()
-                evaluate_model(model_id, stop, bux, data_id)
+                evaluate_model(model_id, stop, bux, data_id, config)
             elif (op_type == 'predict_text'):
                 text = ele.get_text() 
-                predict_text(model_id, stop, bux, text)
+                predict_text(model_id, stop, bux, text, config)
             elif (op_type == 'predict'):
                 doc_id =  ele.get_text()
-                predict_data(model_id, stop, bux, doc_id)
+                predict_data(model_id, stop, bux, doc_id, config)
             else:
                 log(f'Wrong operation type {op_type} for model {model_id}', 
                     'ERROR')
@@ -78,19 +77,16 @@ def training_thread(q: Queue, stop: InterruptState,
 
 # Call this method to train a new model
 def train_new_model(model_id: str, stop: InterruptState, 
-    bux: BunnyPostalService):
+    bux: BunnyPostalService, config):
     # Check if default values are needed and set them accordingly
-    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
-    
-    with open('./distilbert_startup.json') as json_file:
-        startup = json.load(json_file)
+    model_info = SqliteDict(config['kv'])[model_id]
 
-    for param in startup['hyper_parameters']:
-        if param['name'] not in model_info['hyper_parameters']:
-            model_info['hyper_parameters'][param['name']] = param['default']
+    for k, v in config['defaults'].items():
+        if k not in model_info['hyper_parameters']:
+            model_info['hyper_parameters'][k] = v
 
     #save to key value store
-    with SqliteDict('./distilBERT.sqlite') as db:
+    with SqliteDict(config['kv']) as db:
         db[model_id] = model_info
         db.commit()
 
@@ -98,10 +94,10 @@ def train_new_model(model_id: str, stop: InterruptState,
         f'values if necessary')
 
     # Get the training Arguments
-    training_args = get_training_args(model_id)
+    training_args = get_training_args(model_id, config)
 
     # Get the data
-    dh = DataHelper(model_id)
+    dh = DataHelper(model_id, config)
     train_data = dh.get_data(model_info['train_ids'])
     val_data = dh.get_data(model_info['val_ids'])
 
@@ -109,7 +105,7 @@ def train_new_model(model_id: str, stop: InterruptState,
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", num_labels = num_labels)
+        config['model'], num_labels = num_labels)
 
     # Define the trainer
     trainer = Trainer(
@@ -128,7 +124,7 @@ def train_new_model(model_id: str, stop: InterruptState,
     model_info['num_labels'] = num_labels
 
     # Update the model info that the model is training
-    with SqliteDict('./distilBERT.sqlite') as db:
+    with SqliteDict(config['kv']) as db:
         db[model_id] = model_info
         db.commit()
 
@@ -140,16 +136,16 @@ def train_new_model(model_id: str, stop: InterruptState,
     # Case: Training finished normally
     if (stop.get_state() == 0):
         # Save the model
-        torch.save(model.state_dict(), f'models/{model_id}.pth')
+        torch.save(model.state_dict(), f'{config["models"]}{model_id}.pth')
 
         # Remove the checkpoints because either the best model is already 
         # loaded or the final model was the goal
-        remove_checkpoints(model_id)
+        remove_checkpoints(model_id, config)
 
         # Update the model info is trained
         model_info['status'] = 'trained'
 
-        with SqliteDict('./distilBERT.sqlite') as db:
+        with SqliteDict(config['kv']) as db:
             db[model_id] = model_info
             db.commit()
 
@@ -162,7 +158,7 @@ def train_new_model(model_id: str, stop: InterruptState,
         # Update the model info that the model was interrupted
         model_info['status'] = 'interrupted'
 
-        with SqliteDict('./distilBERT.sqlite') as db:
+        with SqliteDict(config['kv']) as db:
             db[model_id] = model_info
             db.commit()
 
@@ -172,7 +168,7 @@ def train_new_model(model_id: str, stop: InterruptState,
 
     # Case: Training interrupted and model to be deleted
     else:
-        delete_model(model_id)
+        delete_model(model_id, config)
 
         bux.deliver_interrupt_message(model_id, False)
 
@@ -181,14 +177,14 @@ def train_new_model(model_id: str, stop: InterruptState,
 
 # Call this method to continue the training of a model.
 def continue_training_model(model_id: str, stop: InterruptState, 
-    bux: BunnyPostalService):
+    bux: BunnyPostalService, config):
     # Get a list of all checkpoints
-    cp_list = os.listdir(f'./checkpoints/{model_id}')
+    cp_list = os.listdir(f'{config["checkpoints"]}{model_id}')
 
-    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+    model_info = SqliteDict(config['kv'])[model_id]
 
     #check for correct status
-    if (model_info['status'] != 'interrupted' or not check_model(model_id)):
+    if (model_info['status'] != 'interrupted' or not check_model(model_id, config)):
         log(f'model {model_id} cant be continued', 'ERROR')
         bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be continued.')
@@ -202,16 +198,16 @@ def continue_training_model(model_id: str, stop: InterruptState,
             cp_val = cp_val_temp
 
     # Get the data
-    dh = DataHelper(model_id)
+    dh = DataHelper(model_id, config)
     train_data = dh.get_data(model_info['train_ids'])
     val_data = dh.get_data(model_info['val_ids'])
 
     # Get the training Arguments
-    training_args = get_training_args(model_id)
+    training_args = get_training_args(model_id, config)
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", num_labels = model_info['num_labels'])
+        config['model'], num_labels = model_info['num_labels'])
 
     # Define the trainer
     trainer = Trainer(
@@ -229,28 +225,28 @@ def continue_training_model(model_id: str, stop: InterruptState,
     # Update the model info that the model is training
     model_info['status'] = 'training'
 
-    with SqliteDict('./distilBERT.sqlite') as db:
+    with SqliteDict(config['kv']) as db:
         db[model_id] = model_info
         db.commit()
 
     # Continue training the model if no interruption
     log(f'Continueing the training for model {model_id}')
-    trainer.train(f'./checkpoints/{model_id}/checkpoint-{cp_val}')
+    trainer.train(f'{config["checkpoints"]}/{model_id}/checkpoint-{cp_val}')
 
     # Training done
     # Case: Training finished normally
     if (stop.get_state() == 0):
         # Save the model
-        torch.save(model.state_dict(), f'models/{model_id}.pth')
+        torch.save(model.state_dict(), f'{config["models"]}{model_id}.pth')
 
         # Remove the checkpoints because either the best model is 
         # already loaded or the final model was the goal
-        remove_checkpoints(model_id)
+        remove_checkpoints(model_id, config)
 
         # Update the model info is trained
         model_info['status'] = 'trained'
 
-        with SqliteDict('./distilBERT.sqlite') as db:
+        with SqliteDict(config['kv']) as db:
             db[model_id] = model_info
             db.commit()
 
@@ -264,7 +260,7 @@ def continue_training_model(model_id: str, stop: InterruptState,
         # Update the model info that the model was interrupted
         model_info['status'] = 'interrupted'
 
-        with SqliteDict('./distilBERT.sqlite') as db:
+        with SqliteDict(config['kv']) as db:
             db[model_id] = model_info
             db.commit()
 
@@ -274,7 +270,7 @@ def continue_training_model(model_id: str, stop: InterruptState,
 
     # Case: Training interrupted and model to be deleted
     else:
-        delete_model(model_id)
+        delete_model(model_id, config)
 
         bux.deliver_interrupt_message(model_id, False)
 
@@ -284,30 +280,30 @@ def continue_training_model(model_id: str, stop: InterruptState,
 
 # Call this method evaluate a model
 def evaluate_model(model_id: str, stop: InterruptState, 
-    bux: BunnyPostalService, data_id: str):
+    bux: BunnyPostalService, data_id: str, config):
     
-    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+    model_info = SqliteDict(config['kv'])[model_id]
 
     #check for correct status
-    if (model_info['status'] != 'trained' or not check_model(model_id)):
+    if (model_info['status'] != 'trained' or not check_model(model_id, config)):
         log(f'model {model_id} cant be evaluated', 'ERROR')
         bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be evaluated.')
         return
 
     # Get the training Arguments
-    training_args = get_training_args(model_id)
+    training_args = get_training_args(model_id, config)
 
     # Get the evaluation data
-    dh = DataHelper(model_id)
+    dh = DataHelper(model_id, config)
     data = dh.get_data(data_id)
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", num_labels = model_info['num_labels'])
+        config['model'], num_labels = model_info['num_labels'])
 
     # Load trained weights
-    model.load_state_dict(torch.load(f'models/{model_id}.pth'))
+    model.load_state_dict(torch.load(f'{config["models"]}{model_id}.pth'))
     model.eval()
 
     # Define the trainer
@@ -334,12 +330,12 @@ def evaluate_model(model_id: str, stop: InterruptState,
 
 # Call this method to predict text with a model
 def predict_text(model_id: str, stop: InterruptState, 
-    bux: BunnyPostalService, sequence: str):
+    bux: BunnyPostalService, sequence: str, config):
     
-    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+    model_info = SqliteDict(config['kv'])[model_id]
 
     #check for correct status
-    if (model_info['status'] != 'trained' or not check_model(model_id)):
+    if (model_info['status'] != 'trained' or not check_model(model_id, config)):
         log(f'model {model_id} cant be predicted', 'ERROR')
         bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be predicted.')
@@ -347,11 +343,11 @@ def predict_text(model_id: str, stop: InterruptState,
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", 
+        config['model'], 
         num_labels = model_info['num_labels'])
 
     # Load trained weights
-    model.load_state_dict(torch.load(f'models/{model_id}.pth'))
+    model.load_state_dict(torch.load(f'{config["models"]}{model_id}.pth'))
     model.eval()
 
     # load the tokenizer
@@ -373,7 +369,7 @@ def predict_text(model_id: str, stop: InterruptState,
     predictions = predictions.tolist()[0]
 
     #define stuff for changing back to original labels
-    tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
+    tags = SqliteDict(config['kv'])[model_id]['label_mapping']
     reverse_tags = {v: k for k, v in tags.items()}
 
     def conv_labels(tag):
@@ -394,12 +390,12 @@ def predict_text(model_id: str, stop: InterruptState,
 
 # Call this method to predict text with a model
 def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService, 
-    doc_id: str):
+    doc_id: str, config):
     
-    model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+    model_info = SqliteDict(config['kv'])[model_id]
 
     #check for correct status
-    if (model_info['status'] != 'trained' or not check_model(model_id)):
+    if (model_info['status'] != 'trained' or not check_model(model_id, config)):
         log(f'model {model_id} cant be predicted', 'ERROR')
         bux.deliver_error_message(model_id, f'Model {model_id} with status'
             f'{status}cant be predicted.')
@@ -407,18 +403,18 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(
-        "distilbert-base-uncased", 
+        config['model'], 
         num_labels = model_info['num_labels'])
 
     # Load trained weights
-    model.load_state_dict(torch.load(f'models/{model_id}.pth'))
+    model.load_state_dict(torch.load(f'{config["models"]}{model_id}.pth'))
     model.eval()
 
     # Get the training Arguments
-    training_args = get_training_args(model_id)
+    training_args = get_training_args(model_id, config)
 
     # todo
-    dh = DataHelper(model_id)
+    dh = DataHelper(model_id, config)
     data = dh.get_data([doc_id])
 
     # Define the trainer
@@ -438,7 +434,7 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     preds = np.argmax(results[0], 2)
 
     #define stuff for changing back to original labels
-    tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
+    tags = SqliteDict(config['kv'])[model_id]['label_mapping']
     reverse_tags = {v: k for k, v in tags.items()}
 
     def conv_labels(tag):

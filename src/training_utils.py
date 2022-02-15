@@ -13,14 +13,14 @@ from src.bunny import BunnyPostalService
 from src.utils import InterruptState, log
 
 # returns the training arguments. values are taken from from model_info
-def get_training_args(model_id):
-    hyper_parameters = SqliteDict('./distilBERT.sqlite')[model_id]['hyper_parameters']
+def get_training_args(model_id, config):
+    hyper_parameters = SqliteDict(config['kv'])[model_id]['hyper_parameters']
 
     log(f'Returning training arguments based on kv-store info for model '
         f'{model_id}', 'DEBUG')
 
     return TrainingArguments(
-        output_dir = f'./checkpoints/{model_id}',
+        output_dir = f'{config["checkpoints"]}{model_id}',
         learning_rate = hyper_parameters['learning_rate'],
         per_device_train_batch_size = hyper_parameters['batch_size'],
         per_device_eval_batch_size = hyper_parameters['batch_size'],
@@ -39,13 +39,12 @@ def get_training_args(model_id):
 
 class DataHelper():
 
-    def __init__(self, model_id):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            "distilbert-base-uncased")
+    def __init__(self, model_id, config):
+        self.tokenizer = AutoTokenizer.from_pretrained(config['model'])
         self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
         log('Set up tokenizer and data collector', 'DEBUG')
 
-        self._tags = SqliteDict('./distilBERT.sqlite')[model_id]['label_mapping']
+        self._tags = SqliteDict(config['kv'])[model_id]['label_mapping']
 
     # methods gets a document from the document service
     def get_doc(self, doc_id):

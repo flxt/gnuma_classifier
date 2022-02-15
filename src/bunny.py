@@ -6,32 +6,27 @@ from src.utils import log
 
 import time
 
-
-# read credentials from json on disk
-def read_credentials(): 
-    with open('./rabbitmq_creds.json') as json_file:
-        creds = json.load(json_file)
-
-    return creds
-
 class BunnyPostalService():
 
     # Bunny says hello to rabbit.
-    def __init__(self):
-        creds = read_credentials()
+    def __init__(self, config):
+        creds = config['rabbit_mq']
 
-        self._credentials = pika.PlainCredentials(creds['rabbit_mq_user'], 
-            creds['rabbit_mq_pass'])
+        with open(config['startup']) as json_file:
+            self._startup = json.load(json_file)
+
         self._connection_params = pika.ConnectionParameters(
-            host=creds['rabbit_mq_host'], port=creds['rabbit_mq_port'],
-            credentials=self._credentials)
+            host=creds['host'], port=creds['port'],
+            credentials=pika.PlainCredentials(creds['user'], creds['pass']))
+
         self._connection = pika.BlockingConnection(self._connection_params)
         self._channel = self._connection.channel()
-        self._exchange = creds['rabbit_mq_exchange']
-        self._routing_key = creds['rabbit_mq_routing_key']
+        self._exchange = creds['exchange']
+        self._routing_key = 'needed?'
 
-        self._address = 'tba'
+        self._address = config['host']
 
+        # todo remove after testing
         self._channel.exchange_declare(exchange = self._exchange, 
             exchange_type='fanout')
 
@@ -47,10 +42,7 @@ class BunnyPostalService():
 
     # The BunnyPostalService introduces the Microservice to the exchange
     def say_hello(self):
-        with open('./distilbert_startup.json') as json_file:
-            startup = json.load(json_file)
-
-        self.send_message(startup, 'ClassifierStart')
+        self.send_message(self._startup, 'ClassifierStart')
 
     # The BunnyPostalService gives an update about training
     def give_update(self, model_id, finished, current_step, total_steps, 
@@ -109,28 +101,28 @@ class BunnyPostalService():
 
 
 # Listening to rabbit to check if supposed to say hello
-def bunny_listening_thread(bux: BunnyPostalService):
-    creds = read_credentials()
+def bunny_listening_thread(bux: BunnyPostalService, config):
+    creds = config['rabbit_mq']
+    q_name = config['path']
 
     # conntect to bunny
-    credentials = pika.PlainCredentials(creds['rabbit_mq_user'], 
-        creds['rabbit_mq_pass'])
     connection_params = pika.ConnectionParameters(
-        host=creds['rabbit_mq_host'], 
-        port=creds['rabbit_mq_port'], credentials = credentials)
+        host=creds['host'], port=creds['port'], 
+        credentials = pika.PlainCredentials(creds['user'], creds['pass']))
+
     connection = pika.BlockingConnection(connection_params)
     channel = connection.channel()
-    exchange = creds['rabbit_mq_exchange']
-    routing_key = creds['rabbit_mq_routing_key']
-    channel.queue_declare(queue = 'distilbert_listen')
-    channel.queue_bind('distilbert_listen', exchange)
+    exchange = creds['exchange']
+
+    channel.queue_declare(queue = q_name)
+    channel.queue_bind(q_name, exchange)
 
     def bunny_callback(ch, method, properties, body):
         #check if supposed to send hello message
         if properties.headers['event'] == 'ExperimentStart':
             bux.say_hello()
 
-    channel.basic_consume(queue='distilbert_listen', 
+    channel.basic_consume(queue=q_name, 
         on_message_callback=bunny_callback, auto_ack=False)
 
     # catch keyboard interrupts

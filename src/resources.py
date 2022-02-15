@@ -47,27 +47,28 @@ class Base(Resource):
 
     #init ressource
     # init the resource
-    def __init__(self, current_model_id: CurrentModel):
+    def __init__(self, current_model_id: CurrentModel, config):
         self._current_model_id = current_model_id
+        self._config = config
 
     # Return the decription and more info for the model with the given id
     def get(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        if not check_model(model_id):
+        if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
         # get info for model from db
-        model_info = SqliteDict('./distilBERT.sqlite')[model_id]
+        model_info = SqliteDict(self._config['kv'])[model_id]
 
         return model_info
 
     # Delete the model with the specified id
     def delete(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
         if self._current_model_id.get_id() == model_id:
@@ -75,7 +76,7 @@ class Base(Resource):
                 message = f'Can not delete model {model_id} cause it is'
                 ' currently getting trained.')
 
-        delete_model(model_id)
+        delete_model(model_id, self._config)
 
         return
 
@@ -83,30 +84,31 @@ class Base(Resource):
 class Continue(Resource):
 
     # init the resource
-    def __init__(self, que: Queue):
+    def __init__(self, que: Queue, config):
         self._q = que
         self._op_type = 'continue'
+        self._config = config
 
     # Continue the training of the classifiers with the specified id.
     def post(self, model_id: str):
         # Check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        if not check_model(model_id):
+        if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
         # Check if model was interruptd
-        if (SqliteDict('./distilBERT.sqlite')[model_id]['status'] 
+        if (SqliteDict(self._config['kv'])[model_id]['status'] 
             != 'interrupted'):
             abort_wrong_op_type(model_id, self._op_type, 
-                SqliteDict('./distilBERT.sqlite')[model_id][status])
+                SqliteDict(self._config['kv'])[model_id][status])
 
         # put training request in the que
         self._q.put(QueueElement(model_id, self._op_type))
 
         # save que to disk
-        with open('que.obj','wb') as queue_save_file:
+        with open(self._config['que'],'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
 
         log(f'Put model {model_id} in queue to continue training')
@@ -118,14 +120,15 @@ class Continue(Resource):
 class Pause(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState, current_model_id: CurrentModel):
+    def __init__(self, stop: InterruptState, current_model_id: CurrentModel, config):
         self._stop = stop
         self._current_model_id = current_model_id
+        self._config = config
 
     # Interrupt the training and save the model to continue it later
     def patch(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
         # can not delete element in the middle of the que
@@ -141,14 +144,15 @@ class Pause(Resource):
 class Interrupt(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState, current_model_id: CurrentModel):
+    def __init__(self, stop: InterruptState, current_model_id: CurrentModel, config):
         self._stop = stop
         self._current_model_id = current_model_id
+        self._config = config
 
     # Interrupt the Training and discard the model.
     def delete(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
         # can not delete element in the middle of the que
@@ -164,17 +168,18 @@ class Interrupt(Resource):
 class PredictText(Resource):
 
     # Init the resource
-    def __init__(self, que: Queue):
+    def __init__(self, que: Queue, config):
         self._q = que
         self._op_type = 'predict_text'
+        self._config = config
 
     # Predict data wiht a specified model
     def post(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        if not check_model(model_id):
+        if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
         if not request.is_json:
@@ -189,7 +194,7 @@ class PredictText(Resource):
         self._q.put(QueueElement(model_id, self._op_type, req['text']))
 
         # save que to disk
-        with open('que.obj', 'wb') as queue_save_file:
+        with open(self._config['que'], 'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
         log(f'Put model {model_id} in queue for text prediction')
 
@@ -198,17 +203,18 @@ class PredictText(Resource):
 class Predict(Resource):
 
     # Init the resource
-    def __init__(self, que: Queue):
+    def __init__(self, que: Queue, config):
         self._q = que
         self._op_type = 'predict'
+        self._config = config
 
     # Predict data wiht a specified model
     def post(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        if not check_model(model_id):
+        if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
         if not request.is_json:
@@ -223,7 +229,7 @@ class Predict(Resource):
         self._q.put(QueueElement(model_id, self._op_type, req['doc_ids']))
 
         # save que to disk
-        with open('que.obj','wb') as queue_save_file:
+        with open(self._config['que'],'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
 
         log(f'Put model {model_id} in queue for prediction')
@@ -235,17 +241,18 @@ class Predict(Resource):
 class Evaluate(Resource):
 
     # Init the resource
-    def __init__(self, que: Queue):
+    def __init__(self, que: Queue, config):
         self._q = que
         self._op_type = 'evaluate'
+        self._config = config
 
     # Evaluate the model with the given data and return some performance info
     def post(self, model_id: str):
         # check if model exists
-        if not model_id in SqliteDict('./distilBERT.sqlite').keys():
+        if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        if not check_model(model_id):
+        if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
         if not request.is_json:
@@ -260,7 +267,7 @@ class Evaluate(Resource):
         self._q.put(QueueElement(model_id, self._op_type, req['doc_ids']))
 
         # save que to disk
-        with open('que.obj','wb') as queue_save_file:
+        with open(self._config['que'],'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
 
         log(f'Put model {model_id} in queue for evaluation')
@@ -269,11 +276,16 @@ class Evaluate(Resource):
 
 # API endpoint for returning a list of all saved models.
 class List(Resource):
+
+    # Init the resource
+    def __init__(self, config):
+        self._config = config
+
     # Return a list of all saved models
     def get(self):
         model_list = []
 
-        with SqliteDict('./distilBERT.sqlite') as db:
+        with SqliteDict(self._config['kv']) as db:
             for model_id in db.keys():
                 model_list.append({'model_id': model_id, 
                     'model_name': db[model_id]['model_name'], 
@@ -287,9 +299,10 @@ class List(Resource):
 class Train(Resource):
 
     # init the resource
-    def __init__(self, que: Queue):
+    def __init__(self, que: Queue, config):
         self._q = que
         self._op_type = 'train'
+        self._config = config
 
     # Train a new Classifier
     def post(self):
@@ -318,7 +331,7 @@ class Train(Resource):
         model_id = str(uuid.uuid4())
 
         # No duplicate model ids :(
-        while (model_id in SqliteDict('./distilBERT.sqlite')):
+        while (model_id in SqliteDict(self._config['kv'])):
             model_id = str(uuid.uuid4())
 
         req['model_id'] = model_id
@@ -329,7 +342,7 @@ class Train(Resource):
             'I-ORG': 4, 'B-LOC': 5, 'I-LOC': 6, 'B-MISC': 7, 'I-MISC': 8}
 
         # Save the model info
-        with SqliteDict('./distilBERT.sqlite') as db:
+        with SqliteDict(self._config['kv']) as db:
             db[model_id] = req
             db.commit()
 
@@ -337,7 +350,7 @@ class Train(Resource):
         self._q.put(QueueElement(model_id, self._op_type))
 
         # save que to disk
-        with open('que.obj','wb') as queue_save_file:
+        with open(self._config['que'],'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
 
         log(f'Put model {model_id} in queue for training')

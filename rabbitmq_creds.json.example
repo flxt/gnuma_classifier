@@ -1,9 +1,0 @@
-{
-	"rabbit_mq_host" : "asdf",
-    "rabbit_mq_port" : 5672,
-    "rabbit_mq_user" : "asdf",
-    "rabbit_mq_pass" : "asdf",
-    "rabbit_mq_exchange" : "asdf",
-    "rabbit_mq_routing_key" : "Classifier.Distilbert",
-    "rabbit_mq_queue" : "distilbert_listen"
-}
