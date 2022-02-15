@@ -34,7 +34,8 @@ def get_training_args(model_id, config):
         adam_beta1 = hyper_parameters['adam_beta1'],
         adam_beta2 = hyper_parameters['adam_beta2'],
         adam_epsilon = hyper_parameters['adam_epsilon'],
-        logging_steps = 100,
+        # take train error every x steps
+        logging_steps = 23,
         )
 
 class DataHelper():

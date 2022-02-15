@@ -101,7 +101,7 @@ def train_new_model(model_id: str, stop: InterruptState,
     train_data = dh.get_data(model_info['train_ids'])
     val_data = dh.get_data(model_info['val_ids'])
 
-    num_labels = len(model_info['hyper_parameters'])
+    num_labels = len(model_info['label_mapping'])
 
     # Define a new model
     model = AutoModelForTokenClassification.from_pretrained(

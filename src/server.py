@@ -9,6 +9,7 @@ import json
 import sys
 import os
 import dill
+from pathlib import Path
 
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate 
 from src.resources import Continue, List, Train, Predict
@@ -23,6 +24,9 @@ def main():
 
     # get config
     config = get_config()
+
+    # make sure models 
+    Path(config['models']).mkdir(parents=True, exist_ok=True)
 
     # set logging lvl
     logging.basicConfig()

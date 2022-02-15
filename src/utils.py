@@ -99,7 +99,8 @@ def check_model(model_id, config):
 
     # Model was interrupted => check for checkpoints
     if (model_info['status'] == 'interrupted'):
-        good = os.path.isdir(f'{config["checkpoints"]}{model_id}')
+        good = (os.path.isdir(f'{config["checkpoints"]}{model_id}') 
+            and not os.listdir(f'{config["checkpoints"]}{model_id}'))
 
     if not good:
         delete_model(model_id, config)
@@ -139,7 +140,7 @@ def get_config():
         config['defaults'][param['name']] = param['default']
 
     # read classifier config file
-    with open(f'./{config["path"]}/config.json') as json_file:
+    with open(f'./{config["path"]}/model.json') as json_file:
         cls_config = json.load(json_file)
 
     # add the values to the config file

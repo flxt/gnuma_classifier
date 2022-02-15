@@ -1,15 +1,22 @@
-# Key Value store
+# the config
+./config.json
+
+# Key Value stores
 *.sqlite
+
+# the save que objects
+*.obj
+
+# model objects
+*.pth
 
 # py cache
 src/__pycache__/
 
 # Models and Checkpoints
-*/models/*
 */checkpoints/*
 
-# the save que object
-*.obj
+
 
 # the config
 config.json
