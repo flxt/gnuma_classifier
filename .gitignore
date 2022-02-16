@@ -1,5 +1,5 @@
 # the config
-./config.json
+config.json
 
 # Key Value stores
 *.sqlite
@@ -15,8 +15,3 @@ src/__pycache__/
 
 # Models and Checkpoints
 */checkpoints/*
-
-
-
-# the config
-config.json

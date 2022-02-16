@@ -70,7 +70,6 @@ class DataHelper():
         return tokens, ner_tags, ids
 
     # get the data and prepare it for 
-    # for now it only loads the wnut_17 data set
     def get_data(self, doc_ids):
         tokens = []
         ner_tags = []
@@ -90,6 +89,47 @@ class DataHelper():
 
         return data
 
+    # methods gets a document from the document service
+    # for prediction => no labels
+    def get_doc_pred(self, doc_id):
+        response = requests.get(doc_id)
+        sentences = response.json()['sentences']
+
+        tokens = []
+        ids = []
+
+        for sentence in sentences:
+            tok_temp = []
+            for token in sentence['tokens']:
+                tok_temp.append(token['token'])
+
+            tokens.append(tok_temp)
+            ids.append(sentence['id'])
+
+        return tokens, ids
+
+    # get the data and prepare it for 
+    # for prediction => no labels
+    def get_data_pred(self, doc_ids):
+        tokens = []
+        ids = []
+        #rotate through all documents to build a data set
+        for doc_id in doc_ids:
+            tok_temp, id_temp = self.get_doc_pred(doc_id)
+            tokens += tok_temp
+            ids += id_temp
+
+
+        ds = Dataset.from_dict({'id': ids, 'tokens': tokens})
+
+        data = ds.map(self.tokenize)
+
+        return data
+
+    #tokenize for predict data
+    def tokenize(self, examples):
+        return self.tokenizer(examples["tokens"], truncation=True, 
+            is_split_into_words=True)
 
     # method to tokenize and allign labels
     # partly taken from the hugging face documentation

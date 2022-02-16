@@ -357,7 +357,18 @@ def predict_text(model_id: str, stop: InterruptState,
     inputs = tokenizer(sequence, return_tensors="pt")
     tokens = inputs.tokens()
 
-    log(inputs, 'DEBUG')
+    # number of tokens without [CLS] and [SEP]
+    num_tokens =  len(tokens) - 2
+
+    # if you find a sentence longer than this im sorry
+    # Supposed to only work for a sentence.
+    # less than a 100 tokens should work for any transformer model
+    if num_tokens > 100:
+        log(f'Sentence: {sequence} with {num_tokens} tokens is too long.', 
+            'ERROR')
+        bux.deliver_error_message(model_id, f'Sentence: {sequence} with ' 
+            f'{num_tokens} tokens is too long.')
+        return
 
     # get model output
     outputs = model(**inputs).logits
@@ -378,12 +389,11 @@ def predict_text(model_id: str, stop: InterruptState,
     # change labels to strings
     predictions = list(map(conv_labels, predictions))
 
-    log(predictions)
-
     log(f'Text prediction for model {model_id} done.')
 
     # bux send results to rabbit mq
-    bux.deliver_text_prediction(model_id, tokens, predictions)
+    bux.deliver_text_prediction(model_id, tokens[1:num_tokens+1], 
+        predictions[1:num_tokens+1])
 
     log(f'Prediction finished for model {model_id}')
 
@@ -413,9 +423,8 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     # Get the training Arguments
     training_args = get_training_args(model_id, config)
 
-    # todo
+    # init data helper
     dh = DataHelper(model_id, config)
-    data = dh.get_data([doc_id])
 
     # Define the trainer
     trainer = Trainer(
@@ -426,12 +435,9 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
         compute_metrics = compute_metrics
         )
 
-    # the data tokens
-    token_data = data['tokens']
-
-    # get predictions from trainer
-    results = trainer.predict(data)
-    preds = np.argmax(results[0], 2)
+    # if doc_id is a string and not a list, convert it.
+    if not isinstance(doc_id, list):
+        doc_id = [doc_id]
 
     #define stuff for changing back to original labels
     tags = SqliteDict(config['kv'])[model_id]['label_mapping']
@@ -440,15 +446,30 @@ def predict_data(model_id: str, stop: InterruptState, bux: BunnyPostalService,
     def conv_labels(tag):
         return reverse_tags[tag]
 
-    # remove the padding. saddly iteratively
-    pred_data = []
-    for i, val in enumerate(token_data):
-        # first: select remove the [CLS], [SEP] and [PAD] tokens
-        # second: map the values to ints
-        # third: convert those to string labels
-        pred_data.append(list(
-            map(conv_labels, map(int, preds[i][1:len(val) + 1]))))
+    # predict the documents one after another
+    for doc in doc_id:
 
-    bux.deliver_data_prediction(model_id, token_data, pred_data, doc_id)
+        #get the data
+        data = dh.get_data_pred([doc])
+
+        log(data)
+
+        # the data tokens
+        token_data = data['tokens']
+
+        # get predictions from trainer
+        results = trainer.predict(data)
+        preds = np.argmax(results[0], 2)
+
+        # remove the padding. saddly iteratively
+        pred_data = []
+        for i, val in enumerate(token_data):
+            # first: select remove the [CLS], [SEP] and [PAD] tokens
+            # second: map the values to ints
+            # third: convert those to string labels
+            pred_data.append(list(
+                map(conv_labels, map(int, preds[i][1:len(val) + 1]))))
+
+        bux.deliver_data_prediction(model_id, token_data, pred_data, doc)
 
     log(f'Prediction finished for model {model_id}')
