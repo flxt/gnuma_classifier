@@ -46,10 +46,10 @@ def abort_wrong_op_type(model_id: str, op_type: str, status: str):
 class Base(Resource):
 
     #init ressource
-    # init the resource
-    def __init__(self, current_model_id: CurrentModel, config):
+    def __init__(self, current_model_id: CurrentModel, config, que):
         self._current_model_id = current_model_id
         self._config = config
+        self._q = q
 
     # Return the decription and more info for the model with the given id
     def get(self, model_id: str):
@@ -57,10 +57,11 @@ class Base(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # check if model is in good state
         if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
-        # get info for model from db
+        # get info for model from kv store
         model_info = SqliteDict(self._config['kv'])[model_id]
 
         return model_info
@@ -71,11 +72,26 @@ class Base(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # check if model is currently in use
         if self._current_model_id.get_id() == model_id:
             abort(404, 
                 message = f'Can not delete model {model_id} cause it is'
                 ' currently getting trained.')
 
+        # delete all instances in que
+        old_q = self._q
+        self._q = Queue()
+
+        while not old_q.empty():
+            ele = old_q.get()
+            if (ele.get_info()[0] != model_id):
+                self._q.put(ele)
+
+        # save que to disk
+        with open(self._config['que'],'wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
+
+        # delete the model
         delete_model(model_id, self._config)
 
         return
@@ -95,6 +111,7 @@ class Continue(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # abort if model is faulty
         if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
@@ -209,14 +226,17 @@ class PredictText(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # abort if model is faulty
         if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
+        # abort if no json
         if not request.is_json:
             return abort_not_json()
 
         req = request.json
 
+        # abort if required parameter is not in json
         if 'text' not in req:
             abort_missing_parameter('text')
 
@@ -229,6 +249,7 @@ class PredictText(Resource):
         log(f'Put model {model_id} in queue for text prediction')
 
         return
+
 # API endpoint for classifying data wiht a specified model
 class Predict(Resource):
 
@@ -244,14 +265,17 @@ class Predict(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # check if model is faulty
         if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
+        # check if request has json body
         if not request.is_json:
             return abort_not_json()
 
         req = request.json
 
+        # check if required param is in json
         if 'doc_ids' not in req:
             abort_missing_parameter('doc_ids')
 
@@ -282,14 +306,17 @@ class Evaluate(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # check if model is faulty
         if not check_model(model_id, self._config):
             abort_faulty_model(model_id)
 
+        # check for json body
         if not request.is_json:
             return abort_not_json()
 
         req = request.json
 
+        # check if required parameter in json
         if 'doc_ids' not in req:
             abort_missing_parameter('doc_ids')
 
@@ -315,6 +342,9 @@ class List(Resource):
     def get(self):
         model_list = []
 
+        # occupy kv to get all info
+        # should be fast enough
+        # build list of all classifiers
         with SqliteDict(self._config['kv']) as db:
             for model_id in db.keys():
                 model_list.append({'model_id': model_id, 
@@ -342,6 +372,7 @@ class Train(Resource):
 
         req = request.json
 
+        # check if all required params are in json
         if 'model_name' not in req:
             abort_missing_parameter('model_name')
 
@@ -364,6 +395,7 @@ class Train(Resource):
         while (model_id in SqliteDict(self._config['kv'])):
             model_id = str(uuid.uuid4())
 
+        # model id and status to model info
         req['model_id'] = model_id
         req['status'] = 'in_que'
 
@@ -385,4 +417,5 @@ class Train(Resource):
 
         log(f'Put model {model_id} in queue for training')
 
+        # return id of new model
         return {'model_id':model_id}

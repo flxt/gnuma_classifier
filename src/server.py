@@ -23,9 +23,9 @@ def main():
     print("Starting server. Press ctrl + C to quit.")
 
     # get config
-    config = get_config()
+    config = get_config('distilBERT', 4793)
 
-    # make sure models 
+    # make sure models directory exists, so save model does not crash
     Path(config['models']).mkdir(parents=True, exist_ok=True)
 
     # set logging lvl
@@ -64,6 +64,7 @@ def main():
     app = Flask(__name__)
     api = Api(app)
 
+    # init the que
     q = Queue()
 
     # check if que file exists
@@ -85,26 +86,26 @@ def main():
                 delete_model(model_id, config)
 
     # Add the RestFULL Resources to the api
-    api.add_resource(Base, '/distilbert/models/<model_id>', 
+    api.add_resource(Base, f'/{config["path"]}/models/<model_id>', 
         resource_class_kwargs ={'current_model_id': current_model_id, 
-        'config': config})
-    api.add_resource(Interrupt, '/distilbert/interrupt/<model_id>', 
+        'config': config, 'que': q})
+    api.add_resource(Interrupt, f'/{config["path"]}/interrupt/<model_id>', 
         resource_class_kwargs ={'stop' : stop, 'bux': bux, 'que' : q,
         'current_model_id': current_model_id, 'config': config})
-    api.add_resource(Pause, '/distilbert/pause/<model_id>', 
+    api.add_resource(Pause, f'/{config["path"]}/pause/<model_id>', 
         resource_class_kwargs ={'stop' : stop, 'bux': bux, 'que' : q,
         'current_model_id': current_model_id, 'config': config})
-    api.add_resource(PredictText, '/distilbert/predict/text/<model_id>', 
+    api.add_resource(PredictText, f'/{config["path"]}/predict/text/'
+        f'<model_id>', resource_class_kwargs ={'que' : q, 'config': config})
+    api.add_resource(Predict, f'/{config["path"]}/predict/data/<model_id>', 
         resource_class_kwargs ={'que' : q, 'config': config})
-    api.add_resource(Predict, '/distilbert/predict/data/<model_id>', 
+    api.add_resource(Evaluate, f'/{config["path"]}/evaluate/<model_id>', 
         resource_class_kwargs ={'que' : q, 'config': config})
-    api.add_resource(Evaluate, '/distilbert/evaluate/<model_id>', 
+    api.add_resource(Continue, f'/{config["path"]}/continue/<model_id>', 
         resource_class_kwargs ={'que' : q, 'config': config})
-    api.add_resource(Continue, '/distilbert/continue/<model_id>', 
-        resource_class_kwargs ={'que' : q, 'config': config})
-    api.add_resource(List, '/distilbert/models',
+    api.add_resource(List, f'/{config["path"]}/models',
         resource_class_kwargs ={'config': config})
-    api.add_resource(Train, '/distilbert/train', 
+    api.add_resource(Train, f'/{config["path"]}/train', 
         resource_class_kwargs ={'que' : q, 'config': config})
 
     #start listening
