@@ -120,10 +120,13 @@ class Continue(Resource):
 class Pause(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState, current_model_id: CurrentModel, config):
+    def __init__(self, stop: InterruptState, current_model_id: CurrentModel, 
+        config, bux, que):
+        self._q = que
         self._stop = stop
         self._current_model_id = current_model_id
         self._config = config
+        self._bux = bux
 
     # Interrupt the training and save the model to continue it later
     def patch(self, model_id: str):
@@ -131,12 +134,24 @@ class Pause(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        # can not delete element in the middle of the que
+        # delete all instances in que
+        old_q = self._q
+        self._q = Queue()
+
+        while not old_q.empty():
+            ele = old_q.get()
+            if (ele.get_info()[0] != model_id):
+                self._q.put(ele)
+
+        # save que to disk
+        with open(self._config['que'],'wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
 
         # If current model the specified one, send interuption
         if model_id == self._current_model_id.get_id():
             self._stop.set_state(1)
-            log('Pause signal sent.')
+        else:
+            bux.deliver_interrupt_message(model_id, True)
         return
 
 
@@ -144,7 +159,10 @@ class Pause(Resource):
 class Interrupt(Resource):
 
     # init the resource
-    def __init__(self, stop: InterruptState, current_model_id: CurrentModel, config):
+    def __init__(self, stop: InterruptState, current_model_id: CurrentModel, 
+        config, bux, que):
+        self._q = que
+        self._bux = bux
         self._stop = stop
         self._current_model_id = current_model_id
         self._config = config
@@ -155,12 +173,24 @@ class Interrupt(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
-        # can not delete element in the middle of the que
+        # delete all instances in que
+        old_q = self._q
+        self._q = Queue()
+
+        while not old_q.empty():
+            ele = old_q.get()
+            if (ele.get_info()[0] != model_id):
+                self._q.put(ele)
+
+        # save que to disk
+        with open(self._config['que'],'wb') as queue_save_file:
+            dill.dump(self._q, queue_save_file)
 
         # If current model the specified one, send interuption
         if model_id == self._current_model_id.get_id():
             self._stop.set_state(2)
-            log('Interruption signal sent')
+        else:
+            bux.deliver_interrupt_message(model_id, False)
         return
 
 

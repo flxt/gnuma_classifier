@@ -89,10 +89,10 @@ def main():
         resource_class_kwargs ={'current_model_id': current_model_id, 
         'config': config})
     api.add_resource(Interrupt, '/distilbert/interrupt/<model_id>', 
-        resource_class_kwargs ={'stop' : stop, 
+        resource_class_kwargs ={'stop' : stop, 'bux': bux, 'que' : q,
         'current_model_id': current_model_id, 'config': config})
     api.add_resource(Pause, '/distilbert/pause/<model_id>', 
-        resource_class_kwargs ={'stop' : stop, 
+        resource_class_kwargs ={'stop' : stop, 'bux': bux, 'que' : q,
         'current_model_id': current_model_id, 'config': config})
     api.add_resource(PredictText, '/distilbert/predict/text/<model_id>', 
         resource_class_kwargs ={'que' : q, 'config': config})

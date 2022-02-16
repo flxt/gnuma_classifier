@@ -28,9 +28,6 @@ def training_thread(q: Queue, stop: InterruptState,
         if q.empty():
             time.sleep(1)
         else:
-            # reset stop
-            stop.set_state(0)
-
             # Get the model id and op type from the first element in the queue.
             ele = q.get()
 
@@ -72,7 +69,15 @@ def training_thread(q: Queue, stop: InterruptState,
 #                
 #                bux.deliver_error_message(model_id, e)
 
+            # reset current model
             current_model_id.set_id('')
+
+            # reset stop
+            if (stop.get_state() == 1):
+                bux.deliver_interrupt_message(model_id, True)
+            elif (stop.get_state() == 2):
+                bux.deliver_interrupt_message(model_id, False)
+            stop.set_state(0)
 
 
 # Call this method to train a new model
@@ -162,15 +167,11 @@ def train_new_model(model_id: str, stop: InterruptState,
             db[model_id] = model_info
             db.commit()
 
-        bux.deliver_interrupt_message(model_id, True)
-
         log(f'Training of model {model_id} was interrupted.')
 
     # Case: Training interrupted and model to be deleted
     else:
         delete_model(model_id, config)
-
-        bux.deliver_interrupt_message(model_id, False)
 
         log(f'Training of model {model_id} was interrupted and the model' 
             f'was deleted.')
@@ -264,15 +265,11 @@ def continue_training_model(model_id: str, stop: InterruptState,
             db[model_id] = model_info
             db.commit()
 
-        bux.deliver_interrupt_message(model_id, True)
-
         log(f'Training of model {model_id} was interrupted.')
 
     # Case: Training interrupted and model to be deleted
     else:
         delete_model(model_id, config)
-
-        bux.deliver_interrupt_message(model_id, False)
 
         log(f'Training of model {model_id} was interrupted and the model was ' 
             f'deleted.')
