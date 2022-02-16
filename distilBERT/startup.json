@@ -1,5 +1,5 @@
 {
-	"classifier_name": "distilbert"
+	"classifier_name": "distilbert",
 	"hyper_parameters": 
 	[
 		{

@@ -109,7 +109,7 @@ class BunnyPostalService():
 
     # The BunnyPostalService delivers an error message
     def deliver_error_message(self, model_id, message):
-        msg_dict = {'model_id': model_id, 'error_message': message}
+        msg_dict = {'model_id': model_id, 'error_message': str(message)}
         self.send_message(msg_dict, 'ClassifierError')
 
     # The BunnyPostalService delivers that the training was interrupted

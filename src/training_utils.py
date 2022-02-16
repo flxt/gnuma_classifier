@@ -48,7 +48,9 @@ class DataHelper():
     # takes model id and config
     def __init__(self, model_id, config):
         # set up tokenizer and data clollator
-        self.tokenizer = AutoTokenizer.from_pretrained(config['model'])
+        # the add prefix part is necessary for roberta
+        self.tokenizer = AutoTokenizer.from_pretrained(config['model'], 
+            add_prefix_space=True)
         self.data_collator = DataCollatorForTokenClassification(
             self.tokenizer)
         log('Set up tokenizer and data collector', 'DEBUG')
