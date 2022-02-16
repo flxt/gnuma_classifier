@@ -10,6 +10,7 @@ import sys
 import os
 import dill
 from pathlib import Path
+import argparse
 
 from src.resources import Base, Interrupt, Pause, PredictText, Evaluate 
 from src.resources import Continue, List, Train, Predict
@@ -19,11 +20,11 @@ from src.utils import log, CurrentModel, get_config
 from src.bunny import BunnyPostalService, bunny_listening_thread
 from src.bunny import bunny_alive_thread
 
-def main():
+def main(path, port):
     print("Starting server. Press ctrl + C to quit.")
 
     # get config
-    config = get_config('distilBERT', 4793)
+    config = get_config(path, port)
 
     # make sure models directory exists, so save model does not crash
     Path(config['models']).mkdir(parents=True, exist_ok=True)
@@ -64,7 +65,7 @@ def main():
     app = Flask(__name__)
     api = Api(app)
 
-    # init the que
+    # init the
     q = Queue()
 
     # check if que file exists
@@ -141,8 +142,16 @@ def main():
             os._exit(0)
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Parse path and port')
+    parser.add_argument('path', type = str,
+                    help='The folder name of the classifier')
+    parser.add_argument('port', type=int,
+                    help='The port number')
+    
+    args = parser.parse_args()
+
     try:
-        main()
+        main(args.path, args.port)
     except (KeyboardInterrupt, SystemExit):
         print('Received KeyboardInterrupt. Shutting Down.')
         try:
