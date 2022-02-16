@@ -142,6 +142,7 @@ def main(path, port):
             os._exit(0)
 
 if __name__ == '__main__':
+    # parse command line arguments
     parser = argparse.ArgumentParser(description='Parse path and port')
     parser.add_argument('path', type = str,
                     help='The folder name of the classifier')

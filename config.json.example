@@ -1,12 +1,10 @@
 {
-	"path": "distilBERT",
-	"address": "localhost",
-	"port": 4793,
+	"host": "****",
 	"rabbit_mq": {
-		"host" : "**",
-    	"port" : 5672,
+		"host" : "***",
+    	"port" : ****,
     	"user" : "***",
     	"pass" : "***",
-    	"exchange" : "test"
+    	"exchange" : "****"
     }
 }
