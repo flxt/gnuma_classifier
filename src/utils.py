@@ -167,7 +167,7 @@ def get_config(path, port):
     config['checkpoints'] = f'./{config["path"]}/checkpoints/'
     config['models'] = f'./{config["path"]}/models/'
     config['startup'] = f'./{config["path"]}/startup.json'
-    config['address'] = (f'http::/{config["host"]}:{config["port"]}'
+    config['address'] = (f'{config["host"]}:{config["port"]}'
         f'/{config["path"]}/')
  
     log(config)

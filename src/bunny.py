@@ -32,14 +32,10 @@ class BunnyPostalService():
 
         # define exchange and routing key
         self._exchange = creds['exchange']
-        self._routing_key = 'needed?'
+        self._routing_key = f'Classifier.{config["path"]}'
 
         # get own address from config file
         self._address = config['address']
-
-        # todo remove after testing
-        self._channel.exchange_declare(exchange = self._exchange, 
-            exchange_type='fanout')
 
     # The BunnyPostalServices delivers your message to the distilbert exchange
     def send_message(self, message, event):

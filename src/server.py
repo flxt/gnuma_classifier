@@ -131,7 +131,7 @@ def main(path, port):
     # Start the APP
     try:
         app.run(debug=False, use_reloader=False, port = config['port'], 
-            host = config['host'])
+            host = '0.0.0.0')
     except Exception as e:
         log('flask crashed', 'ERROR')
         bux.deliver_error_message('', e)
