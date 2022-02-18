@@ -69,6 +69,8 @@ def remove_checkpoints(model_id, config):
 # Tries to delete saved model, checkpoint, and the kv-store entry.
 # The method returns the model_info (kv-store entry) of the deleted model.
 def delete_model(model_id, config):
+    log(f'DELETE {model_id}')
+
     model_info = ''
 
     # remove the model from kv store
@@ -107,7 +109,12 @@ def check_model(model_id, config):
     # interrupted model
     if (model_info['status'] == 'interrupted'):
         good = (os.path.isdir(f'{config["checkpoints"]}{model_id}') 
-            and not os.listdir(f'{config["checkpoints"]}{model_id}'))
+            and len(os.listdir(f'{config["checkpoints"]}{model_id}')) > 0)
+        log(good)
+        log(model_id)
+        log(model_info)
+        log(os.path.isdir(f'{config["checkpoints"]}{model_id}'))
+        log(os.listdir(f'{config["checkpoints"]}{model_id}'))
 
     # if model is faulty => delete it
     if not good:
@@ -168,7 +175,7 @@ def get_config(path, port):
     config['models'] = f'./{config["path"]}/models/'
     config['startup'] = f'./{config["path"]}/startup.json'
     config['address'] = (f'{config["host"]}:{config["port"]}'
-        f'/{config["path"]}/')
+        f'/{config["path"]}')
  
     log(config)
 

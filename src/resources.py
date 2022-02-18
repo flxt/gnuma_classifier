@@ -14,33 +14,33 @@ from src.utils import log, CurrentModel
 
 # Abort if a json file is expected, but not part of the request
 def abort_not_json():
+    log('Only accepting requests with mime type application/json.', 'ERROR')
     abort(400, 
         message='Only accepting requests with mime type application/json.')
-    log('Only accepting requests with mime type application/json.', 'WARNING')
 
 # Abort if expected parameter is missing from the request.
 def abort_missing_parameter(parameter_name: str):
+    log(f'Expected "{parameter_name}" to be part of the request body.', 
+        'ERROR')
     abort(400, 
         message=f'Expected "{parameter_name}" to be part of the request body.')
-    log(f'Expected "{parameter_name}" to be part of the request body.', 
-        'WARNING')
 
 # Abort if specified model doesnt exist.
 def abort_wrong_model_id(model_id: str):
+    log(f'No model with ÍD "{model_id}" exists.', 'ERROR')
     abort(400, message=f'No model with ÍD "{model_id}" exists.')
-    log(f'No model with ÍD "{model_id}" exists.', 'WARNING')
 
 # Abort if model is corrupted.
 def abort_faulty_model(model_id: str):
+    log(f'Model "{model_id}" corrupted. Delete the model.', 'ERROR')
     abort(400, message=f'Model "{model_id}" corrupted. Delete the model.')
-    log(f'Model "{model_id}" corrupted. Delete the model.', 'WARNING')
 
 # Abort wrong model for operation
 def abort_wrong_op_type(model_id: str, op_type: str, status: str):
+    log(f'Can not {status} for model {model_id} with status {status}.', 
+        'ERROR')
     abort(400, 
         message = f'Cant {op_type} for model {model_id} with status {status}.')
-    log(f'Can not {status} for model {model_id} with status {status}.', 
-        'WARNING')
 
 # API enpoint where only a model ID is given
 class Base(Resource):
@@ -49,7 +49,7 @@ class Base(Resource):
     def __init__(self, current_model_id: CurrentModel, config, que):
         self._current_model_id = current_model_id
         self._config = config
-        self._q = q
+        self._q = que
 
     # Return the decription and more info for the model with the given id
     def get(self, model_id: str):
@@ -107,6 +107,7 @@ class Continue(Resource):
 
     # Continue the training of the classifiers with the specified id.
     def post(self, model_id: str):
+
         # Check if model exists
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
@@ -168,8 +169,11 @@ class Pause(Resource):
         if model_id == self._current_model_id.get_id():
             self._stop.set_state(1)
         else:
-            bux.deliver_interrupt_message(model_id, True)
+            self._bux.deliver_interrupt_message(model_id, True)
         return
+
+    def put(self, model_id: str):
+        self.patch(model_id)
 
 
 # API endpoint for interrupting the training
@@ -207,7 +211,7 @@ class Interrupt(Resource):
         if model_id == self._current_model_id.get_id():
             self._stop.set_state(2)
         else:
-            bux.deliver_interrupt_message(model_id, False)
+            self._bux.deliver_interrupt_message(model_id, False)
         return
 
 
@@ -302,6 +306,7 @@ class Evaluate(Resource):
 
     # Evaluate the model with the given data and return some performance info
     def post(self, model_id: str):
+
         # check if model exists
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
@@ -312,6 +317,7 @@ class Evaluate(Resource):
 
         # check for json body
         if not request.is_json:
+            log('no json')
             return abort_not_json()
 
         req = request.json

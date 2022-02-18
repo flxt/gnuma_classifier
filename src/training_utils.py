@@ -20,22 +20,24 @@ def get_training_args(model_id, config):
     log(f'Returning training arguments based on kv-store info for model '
         f'{model_id}', 'DEBUG')
 
+    log(hyper_parameters)
+
     # return training arguments based on those hyper parameters
     return TrainingArguments(
         output_dir = f'{config["checkpoints"]}{model_id}',
-        learning_rate = hyper_parameters['learning_rate'],
-        per_device_train_batch_size = hyper_parameters['batch_size'],
-        per_device_eval_batch_size = hyper_parameters['batch_size'],
-        num_train_epochs = hyper_parameters['epochs'],
-        weight_decay = hyper_parameters['adam_weigth_decay'],
-        warmup_ratio = hyper_parameters['warmup_ratio'],
-        load_best_model_at_end = hyper_parameters['best_model'],
+        learning_rate = float(hyper_parameters['learning_rate']),
+        per_device_train_batch_size = int(hyper_parameters['batch_size']),
+        per_device_eval_batch_size = int(hyper_parameters['batch_size']),
+        num_train_epochs = float(hyper_parameters['epochs']),
+        weight_decay = float(hyper_parameters['adam_weigth_decay']),
+        warmup_ratio = float(hyper_parameters['warmup_ratio']),
+        load_best_model_at_end = bool(hyper_parameters['best_model']),
         evaluation_strategy = 'steps',
-        save_steps = hyper_parameters['steps'],
-        eval_steps = hyper_parameters['steps'],
-        adam_beta1 = hyper_parameters['adam_beta1'],
-        adam_beta2 = hyper_parameters['adam_beta2'],
-        adam_epsilon = hyper_parameters['adam_epsilon'],
+        save_steps = int(hyper_parameters['steps']),
+        eval_steps = int(hyper_parameters['steps']),
+        adam_beta1 = float(hyper_parameters['adam_beta1']),
+        adam_beta2 = float(hyper_parameters['adam_beta2']),
+        adam_epsilon = float(hyper_parameters['adam_epsilon']),
         # take train error every x steps
         logging_steps = 10,
         )
@@ -203,8 +205,7 @@ class EvaluateCallback(TrainerCallback):
     def __init__(self, bux: BunnyPostalService, model_id: str):
         self._bux = bux
         self._model_id = model_id
-        self._metrics = {'train_loss': -1, 'eval_loss': -1, 
-            'eval_accuracy': -1, 'eval_f1': -1}
+        self._metrics = {}
         self._finished = False
 
     # on evaluate up date the metrics for evaluation
@@ -222,8 +223,9 @@ class EvaluateCallback(TrainerCallback):
 
     # send updates on a regular basis
     def on_step_begin(self, args, state, control, **kwargs):
+
         # update every 10 steps
-        if(state.global_step % 10 == 0):
+        if(state.global_step % 10 == 0 and state.global_step > 0):
             self._bux.give_update(self._model_id, self._finished, 
                 state.global_step, state.max_steps, state.epoch, 
                 self._metrics)
