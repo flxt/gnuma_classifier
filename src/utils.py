@@ -152,8 +152,11 @@ def get_config(path, port):
     config['port'] = port
 
     # read start up file
-    with open(f'./{config["path"]}/startup.json') as json_file:
+    with open(f'./startup.json') as json_file:
         startup = json.load(json_file)
+
+    # add classifier name to startup
+    startup['classifier_name'] = str(config['path'])
 
     # add default values to config file
     config['defaults'] = {}
@@ -173,7 +176,7 @@ def get_config(path, port):
     config['que'] = f'./{config["path"]}/que.obj'
     config['checkpoints'] = f'./{config["path"]}/checkpoints/'
     config['models'] = f'./{config["path"]}/models/'
-    config['startup'] = f'./{config["path"]}/startup.json'
+    config['startup'] = startup
     config['address'] = (f'{config["host"]}:{config["port"]}'
         f'/{config["path"]}')
  

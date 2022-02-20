@@ -15,11 +15,8 @@ class BunnyPostalService():
         #get credits from config file
         creds = config['rabbit_mq']
 
-        # load the start up file and save it in var to use it later
-        # goal is to load it only once, it is not big so it does not matter
-        # that it is in memory
-        with open(config['startup']) as json_file:
-            self._startup = json.load(json_file)
+        # get startup from config
+        self._startup = config['startup']
 
         # init the connection parameters
         self._connection_params = pika.ConnectionParameters(
@@ -120,7 +117,7 @@ def bunny_listening_thread(bux: BunnyPostalService, config):
     creds = config['rabbit_mq']
 
     # define name for que
-    q_name = config['path']
+    q_name = f'{config["path"]}_{config["path"]}'
 
     # conntect to rabbit mq
     connection_params = pika.ConnectionParameters(
