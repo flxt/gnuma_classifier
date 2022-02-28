@@ -45,7 +45,7 @@ def main(path, port):
                     #log(SqliteDict(config['kv'])[model_id]['status'])
                     with SqliteDict(config['kv']) as db:
                         model_info = db[model_id]
-                        model_info['status'] = 'interrupted'
+                        model_info['status'] = 'paused'
                         db[model_id] = model_info
                         db.commit()
                     #log(SqliteDict(config['kv'])[model_id]['status'])

@@ -174,7 +174,7 @@ def train_new_model(model_id: str, stop: InterruptState,
     # Case: Training was paused
     elif (stop.get_state() == 1): 
         # Update the model info that the model was interrupted
-        model_info['status'] = 'interrupted'
+        model_info['status'] = 'paused'
 
         with SqliteDict(config['kv']) as db:
             db[model_id] = model_info
@@ -200,7 +200,7 @@ def continue_training_model(model_id: str, stop: InterruptState,
     model_info = SqliteDict(config['kv'])[model_id]
 
     #check for correct status
-    if (model_info['status'] != 'interrupted' or not 
+    if (model_info['status'] != 'paused' or not 
         check_model(model_id, config)):
         # if not stop and send error message
         log(f'model {model_id} cant be continued', 'ERROR')
@@ -275,7 +275,7 @@ def continue_training_model(model_id: str, stop: InterruptState,
     # Case: Training was paused
     elif (stop.get_state() == 1): 
         # Update the model info that the model was interrupted
-        model_info['status'] = 'interrupted'
+        model_info['status'] = 'paused'
 
         with SqliteDict(config['kv']) as db:
             db[model_id] = model_info
@@ -338,7 +338,8 @@ def evaluate_model(model_id: str, stop: InterruptState,
 
     # get metrics for output
     metrics = {}
-    metrics['eval_accuracy'] = out['eval_accuracy']
+    metrics['eval_precission'] = out['eval_precission']
+    metrics['eval_recall'] = out['eval_recall']
     metrics['eval_f1'] = out['eval_f1']
 
     # send the results

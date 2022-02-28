@@ -118,7 +118,7 @@ class Continue(Resource):
 
         # Check if model was interruptd
         if (SqliteDict(self._config['kv'])[model_id]['status'] 
-            != 'interrupted'):
+            != 'paused'):
             abort_wrong_op_type(model_id, self._op_type, 
                 SqliteDict(self._config['kv'])[model_id][status])
 
@@ -152,6 +152,11 @@ class Pause(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # check if model is currently training
+        if not model_id == self._current_model_id.get_id():
+            abort(400, message=f'Model "{model_id}" not training right now,'
+                f'so it can not be paused.')
+
         # delete all instances in que
         old_q = self._q
         self._q = Queue()
@@ -165,12 +170,8 @@ class Pause(Resource):
         with open(self._config['que'],'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
 
-        # If current model the specified one, send interuption
-        if model_id == self._current_model_id.get_id():
-            self._stop.set_state(1)
-        else:
-            self._bux.deliver_interrupt_message(model_id, True)
-        return
+        # set pause flasg
+        self._stop.set_state(1)
 
     def put(self, model_id: str):
         self.patch(model_id)
@@ -194,6 +195,14 @@ class Interrupt(Resource):
         if not model_id in SqliteDict(self._config['kv']).keys():
             abort_wrong_model_id(model_id)
 
+        # check if model is paused, in que or training right now
+        # this means paused models that are not training right now
+        # can be deleted with this endpoint
+        status = SqliteDict(self._config['kv'])[model_id]['status']
+        if (status not in ['in_que','paused', 'training']):
+            abort(400, message=f'Model "{model_id}" with status {status}'
+                f'can not be Interrupted.')
+
         # delete all instances in que
         old_q = self._q
         self._q = Queue()
@@ -207,10 +216,12 @@ class Interrupt(Resource):
         with open(self._config['que'],'wb') as queue_save_file:
             dill.dump(self._q, queue_save_file)
 
-        # If current model the specified one, send interuption
+        # If currently training => set stop flag
         if model_id == self._current_model_id.get_id():
             self._stop.set_state(2)
+        # else delete model and deliver interrupt message
         else:
+            delete_model(model_id)
             self._bux.deliver_interrupt_message(model_id, False)
         return
 

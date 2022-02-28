@@ -107,7 +107,7 @@ def check_model(model_id, config):
     # Model was interrupted => check for checkpoints
     # check point file has to include atleast one checkpoint for an
     # interrupted model
-    if (model_info['status'] == 'interrupted'):
+    if (model_info['status'] == 'paused'):
         good = (os.path.isdir(f'{config["checkpoints"]}{model_id}') 
             and len(os.listdir(f'{config["checkpoints"]}{model_id}')) > 0)
         log(good)

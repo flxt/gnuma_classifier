@@ -1,5 +1,4 @@
 from datasets import Dataset
-from sklearn.metrics import accuracy_score, f1_score
 from transformers import AutoTokenizer, DataCollatorForTokenClassification
 from transformers import AutoModelForTokenClassification, TrainingArguments
 from transformers import TrainerCallback
@@ -211,7 +210,8 @@ class EvaluateCallback(TrainerCallback):
     # on evaluate up date the metrics for evaluation
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         self._metrics['eval_loss'] = metrics['eval_loss']
-        self._metrics['eval_accuracy'] = metrics['eval_accuracy']
+        self._metrics['eval_precission'] = metrics['eval_precission']
+        self._metrics['eval_recall'] = metrics['eval_recall']
         self._metrics['eval_f1'] = metrics['eval_f1']
 
     # on log update the train loss
@@ -246,17 +246,43 @@ def compute_metrics(pred):
     labels = pred.label_ids.flatten()
     preds = pred.predictions.argmax(-1).flatten()
 
-    #remove the padding
+    #remove the padding 
     preds = preds[labels != -100]
-    labels = labels[labels != -100]
+    labels = labels[labels != -100] 
 
-    #calculate the accuracy
-    acc = accuracy_score(labels, preds)
+    # predicted positives => predicted named entity
+    preds_pp = preds[preds != 0]
+    labels_pp = labels[preds != 0]
+
+    # calculate precission
+    # precission is thepercentage of named entities found by the learning 
+    # system that are correct
+    prec = np.sum(preds_pp == labels_pp) / preds_pp.size
+
+    # only positive label => true named entities
+    preds_tp = preds[labels != 0]
+    labels_tp = labels[labels != 0]
+
+    # calculate the recall
+    # recall is the percentage of named entities present in the 
+    # corpus that are found by the system
+    rec = np.sum(preds_tp == labels_tp) / preds_tp.size
     
     # calculate f1 score
-    f1 = f1_score(labels, preds, average = 'macro')
+    f1 = 2 * prec * rec / (prec + rec)
+
+    # results to good :(
+    log(f'preds.size => {preds.size}')
+    log(f'prec a => {np.sum(preds_pp == labels_pp)}')
+    log(f'preds_pp.size => {preds_pp.size}')
+    log(f'rec a => {np.sum(preds_tp == labels_tp)}')
+    log(f'preds_tp.size => {preds_tp.size}')
+
+    log(f'preds_pp => {preds_pp[1:40]}')
+    log(f'labels_pp => {labels_pp[1:40]}')
 
     return {
-        'accuracy': acc,
+        'precission': prec,
+        'recall': rec,
         'f1': f1
     }
