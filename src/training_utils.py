@@ -255,7 +255,7 @@ def compute_metrics(pred):
     labels_pp = labels[preds != 0]
 
     # calculate precission
-    # precission is thepercentage of named entities found by the learning 
+    # precission is the percentage of named entities found by the learning 
     # system that are correct
     prec = np.sum(preds_pp == labels_pp) / preds_pp.size
 
@@ -272,14 +272,11 @@ def compute_metrics(pred):
     f1 = 2 * prec * rec / (prec + rec)
 
     # results to good :(
-    log(f'preds.size => {preds.size}')
-    log(f'prec a => {np.sum(preds_pp == labels_pp)}')
-    log(f'preds_pp.size => {preds_pp.size}')
-    log(f'rec a => {np.sum(preds_tp == labels_tp)}')
-    log(f'preds_tp.size => {preds_tp.size}')
-
-    log(f'preds_pp => {preds_pp[1:40]}')
-    log(f'labels_pp => {labels_pp[1:40]}')
+    log(f'preds.size => {preds.size}', 'DEBUG')
+    log(f'prec a => {np.sum(preds_pp == labels_pp)}', 'DEBUG')
+    log(f'preds_pp.size => {preds_pp.size}', 'DEBUG')
+    log(f'rec a => {np.sum(preds_tp == labels_tp)}', 'DEBUG')
+    log(f'preds_tp.size => {preds_tp.size}', 'DEBUG')
 
     return {
         'precission': prec,

@@ -315,6 +315,7 @@ class Evaluate(Resource):
         self._op_type = 'evaluate'
         self._config = config
 
+
     # Evaluate the model with the given data and return some performance info
     def post(self, model_id: str):
 
@@ -415,6 +416,10 @@ class Train(Resource):
         # model id and status to model info
         req['model_id'] = model_id
         req['status'] = 'in_que'
+
+        # add hyper par dict if missing
+        if 'hyper_parameters' not in req:
+            req['hyper_parameters'] = {}
 
         #remove later. moch up for now
         req['label_mapping'] = {'O': 0, 'B-PER': 1, 'I-PER': 2, 'B-ORG': 3, 
